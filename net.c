@@ -1,0 +1,451 @@
+/***************************************************************************
+  Copyright (C), 2009-2014 GuangdongGuanglian Electronic Technology Co.,Ltd.
+  FileName:      net.cpp
+  Author:        jiang
+  Version :      1.0    
+  Date:          2014-02-27
+  Description:        
+  History:         
+      <author>  <time>   <version >   <desc> 
+***************************************************************************/
+#include<sys/ioctl.h>
+#include<string.h>
+#include<stdio.h>
+#include<unistd.h>
+#include<stdlib.h>
+#include<pthread.h>
+#include<string.h>
+#include<sys/socket.h>
+#include<netinet/in.h>
+#include<arpa/inet.h>
+#include<netdb.h>
+#include<linux/if_ether.h>
+#include<linux/if.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<errno.h>
+#include<fcntl.h>
+#include<limits.h>
+#include"json.h"
+#include"cJSON.h"
+#include"net.h"
+#include"timer.h"
+#include"HttpModule.h"
+#include"term.h"
+#include"sysinit.h"
+
+
+
+extern int MsgtermTxId; //���ͳ������ݵ���Ϣ����
+//extern int MsgtermRxId; //���ܳ������ݵ���Ϣ����
+extern int MsgserverTxId;//���ͷ��������ݵ���Ϣ����
+extern uint8 client_flag;
+
+extern uint8 msgfromflg;
+extern uint8 term_send_flag;
+extern uint8 term_rcv_flag;
+extern uint8 client_send_count;
+extern uint8 server_heart_flag;
+extern uint8 node_heart_flag;
+uint8 Client_Sn=0;
+int Client_Socket=0;
+uint8 listen_thread_isover=0;
+
+uint16 client_num=0;
+
+#if 1
+node_list node_table[NODE_NUM]={
+		                        {"1234567890","ce75",{{{0x00,0x00,0x00,0x11,0x25,0x52},1,"was",60,0,0,0,0,0,0,0,0},{{0x00,0x00,0x12,0x34,0x56,0x78},2,"water",60,0,0,0,0,0,0,0,0},{{0xaa,0x12,0x34,0x56,0x78,0x90},3,"water",60,0,0,0,0,0,0,0,0}}},
+		                        {"1234567890","7436",{{{0x04,0x04,0x04,0x04,0x04,0x04},1,"war",60,0,0,0,0,0,0,0,0},{{0x05,0x05,0x05,0x05,0x05,0x05},2,"water",60,0,0,0,0,0,0,0,0},{{0x06,0x06,0x06,0x06,0x06,0x06},2,"water",60,0,0,0,0,0,0,0,0}}}
+                               };
+uint8 Term_Num[NODE_NUM]={3,3};
+#endif
+
+//uint8 node_ip[20]="192.168.0.102";
+client_status client_list[MAX_CLIENT_NUM];
+void *client_type_thread()
+{
+  msgform term_msg;
+  uint8 msgsize;
+  uint8 term_code[TERM_LEN]={0};
+  uint8 node_id[TERM_LEN]={0};
+  uint8 i=0;
+  while(1)
+  	{
+#if 1
+     msgsize=msgrcv(MsgtermTxId, &term_msg,sizeof(msgform),0,0);
+     printf("msgsize=%d\n",msgsize);
+	 if((msgsize>0)&&(term_send_flag==enable))
+       {
+		memcpy(term_code,term_msg.mtext,TERM_LEN);
+		printf("client term_code=");
+		for(i=0;i<TERM_LEN;i++)
+		{printf("%02x",term_code[i]);}
+		printf("\n");
+		memcpy(node_id,(term_msg.mtext+TERM_LEN),NODE_LEN);
+		printf("node_id=%s\n",node_id);
+		msgfromflg=MsgComClient;
+		SendDataToDev(term_code,node_id);
+		client_send_count++;
+
+	   }
+     if(client_send_count<=3)
+	   {
+	     if(term_rcv_flag==enable)
+	     	{
+             //oneclient_send_flag=enable;//��ͻ��˷��ͳ�����Ӧ��Ϣ
+			 term_send_flag=enable;
+			 term_rcv_flag=disable;
+			 client_send_count=0;
+			// printf("22222");
+	        }
+	     else
+	     {
+	    	 msgfromflg=MsgComClient;
+	    	 SendDataToDev(term_code,node_id);
+	     }
+
+       }
+	  else
+	   {
+          term_send_flag=enable;
+		  client_send_count=0;
+	   }
+#endif
+
+
+     if(client_flag==enable)
+     	{
+     	 for(i=0;i<MAX_CLIENT_NUM;i++)
+          {
+
+     		printf("client_count%d=%d\n",i+1,client_list[i].client_count);
+		   if(client_list[i].client_count>0)
+            {
+			  client_list[i].client_count--;
+              client_flag=disable;
+			  //client_list[i].client_alive=online;
+		   	}
+		   else
+		 	{
+             client_list[i].client_alive=offline;
+             client_list[i].client_count=0;
+			 client_flag=disable;
+			 DBG_PRINT("yangguixin5\n");
+			// exit(1);
+		    }
+		   printf("client_status%d=%d\n",i+1,client_list[i].client_alive);
+     	  }
+
+	    }
+
+    }
+  return 0;
+}
+
+void *client_msg_thread()
+
+{
+    struct sockaddr_in servaddr;
+    int s32Rtn;
+    int s32Socket_value = 1;
+    int Recvsize_2 = 0;
+    unsigned int pTcpPort;
+    int sockfd;
+	char receive_buf[MAXBUF];
+	//uint8 i=0;
+
+    pTcpPort =CLIENT_PORT;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) 
+    { perror("client socket error!");}
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &s32Socket_value,sizeof(int)) == -1) 
+    { printf("client set socketopt err!!!!\n");
+	  //goto ERR;
+    }
+
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(pTcpPort);
+
+    s32Rtn = bind(sockfd, (struct sockaddr *) &servaddr,sizeof(struct sockaddr_in));
+    if (s32Rtn < 0)
+    { printf(" ****listen client  connected  listening on port %d, bind err, %d !!!!\n", pTcpPort,s32Rtn);
+       // goto ERR;
+    }
+    else
+    {
+        printf(" **** listen client connected  listening on port %d \n", pTcpPort);
+    }
+
+    s32Rtn = listen(sockfd, 5);
+    if (s32Rtn < 0) 
+    {
+        printf("client listening on port %d, listen err, %d \n", pTcpPort,s32Rtn);
+	    //goto ERR;
+    }
+    else
+    printf("---listen client connected thread start----\r\n");
+
+	memset(receive_buf,0,MAXBUF);
+	memset(client_list,0,sizeof(client_status));
+	//for(i=0;i<MAX_CLIENT_NUM;i++)
+    //{
+	//client_list[i].client_count=0;
+     //
+   // }
+    while ((client_list[client_num].client_socket= accept(sockfd, NULL, 0)) >= 0) //等待客户端链接
+	//while ((client_list[client_num].client_socket= accept(sockfd, (struct sockaddr *)&newaddr,sizeof(struct sockaddr_in))) >= 0) //等待客户端链接
+    { 
+		printf(" client connected success \n ");
+		Recvsize_2 = recv(client_list[client_num].client_socket, receive_buf,sizeof(receive_buf), 0);
+        printf("***Recvsize_2=%d ****\r\n",Recvsize_2);
+        printf("***client_socket=%02x ****\r\n",client_list[client_num].client_socket);
+        printf("***client_num=%d ****\r\n",client_num);
+        //if(receive_buf != NULL)
+        if(Recvsize_2 != 0)
+        {
+
+          if((receive_buf[0]=='{')&&(receive_buf[Recvsize_2-1]))
+            {printf("receive json=%s\r\n",receive_buf);
+           // printf("***receive client json ****\r\n");
+			
+            memcpy(client_list[client_num].client_buff,receive_buf,Recvsize_2);
+
+            printf("**client_buff=%s ****\r\n",client_list[client_num].client_buff);
+
+			client_list[client_num].client_buff_len=Recvsize_2;
+
+            parse_json_client(client_list[client_num].client_buff,client_list[client_num].client_buff_len,client_list[client_num].client_socket);
+          }
+          else
+          {printf("receive client data error\n");}
+            
+        }//if(receive_buf != NULL)
+        else
+        {
+        	//close(client_list[client_num].client_socket);
+        	//close(sockfd);
+            //response_msg(open_channel,client_list[client_num].client_socket);
+            printf("**** client socket receive data error !!!!\r\n");
+        }
+
+        //printf("***Recvsize_2=%d ****\r\n",Recvsize_2);
+        if (client_list[client_num].client_socket < 0)
+         {
+        	//close(client_list[client_num].client_socket);
+        	//close(sockfd);
+        	printf("****MTCP listening on port %d,accept err, %d!!!!\n", pTcpPort,client_list[client_num].client_socket);
+        	//goto ERR;
+          }
+
+		client_num++;
+		if(client_num>MAX_CLIENT_NUM)
+		{
+		 client_num=0;
+		}
+       // continue;
+    }
+
+//ERR:
+      //close(client_list[client_num].client_socket);
+	 // close(sockfd);
+  //    printf(" socket connected thread stop \n ");
+      //listen_thread_isover = 1;
+     return 0;
+}
+
+
+
+
+void *node_msg_thread()
+{
+
+  while(1)
+  {
+	  nodeSocket();
+  }
+  return 0;
+}
+
+
+void *server_msg_thread()
+{
+
+  while(1)
+  {
+	  ServerSocket();
+  }
+  return 0;
+}
+
+
+int nodeSocket()
+    {   
+        uint8 msg[20] = "0200070007";
+		//int bytes_sent=0;
+		int cfd=0;                                           //�ļ�������
+		int recbytes=0;
+		char buffer[MAXBUF]={0};	                          //���ܻ�����
+		struct sockaddr_in s_add;                   //�洢����˺ͱ��˵�ip���˿ڵ���Ϣ�ṹ��
+		uint16 nodeport=0;
+		uint8 rc=0;
+		//cJSON *root;
+	    //char *out=NULL;
+
+
+		nodeport=NODE_PORT;
+	    //nodeport=5002;
+		cfd = socket(AF_INET, SOCK_STREAM, 0);           //����socket ʹ����������TCP������ 
+		if(cfd == -1 )
+		{
+			printf("node socket fail ! \r\n");
+			return -1;
+		}
+		printf("node socket ok !\r\n");
+		
+		bzero(&s_add,sizeof(struct sockaddr_in));        //����������˵�ip�Ͷ˿���Ϣ������ṹ����Բ�����
+		s_add.sin_family=AF_INET;
+		s_add.sin_addr.s_addr= inet_addr(GATEWAY_IPADDR);    //ipת��Ϊ4�ֽ����Σ�ʹ��ʱ��Ҫ���ݷ����ip���и���
+		s_add.sin_port=htons(nodeport);
+		 	
+		printf("node_addr = %#x ,nodeport=: %#x\r\n",s_add.sin_addr.s_addr,s_add.sin_port); // �����ӡ������С�˺�����ƽʱ���������෴�ġ�
+
+		if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )// �ͻ������ӷ���������������Ϊsocket�ļ�����������ַ��Ϣ����ַ�ṹ��С
+		{
+			printf("node connect fail !\r\n");
+			return -1;
+		}
+		else
+		{
+		  printf("node socket connect ok ! rc=%d\r\n",rc);
+		  if(node_heart_flag==enable)
+		    {
+			  node_heart_flag=disable;
+			  printf("send heart beat\n");
+			  send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
+			 }
+
+		  memset(buffer,0,MAXBUF);
+          recbytes = recv(cfd, buffer, MAXBUF,0);     //���ӳɹ�,�ӷ���˽����ַ�
+          DBG_PRINT("recbytes= %d\n",recbytes);
+
+		  if(recbytes==-1)
+		  {
+			printf("node read data fail !\r\n");
+			return -1;
+		  }
+         else if(recbytes>0)
+		  {
+            //DBG_PRINT("3333\n");
+		    printf("node rxbuffer=%s\r\n",buffer);
+		    if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
+	        {parse_json_node(buffer,recbytes);}
+		    else
+		    {printf("receive node data error\n");}
+       	  }
+
+	}
+		close(cfd);
+		return 0;
+
+}
+
+uint8 ServerHeart_sn=0;
+
+int ServerSocket()
+    {
+        uint8 msg[20] = "0200070007";
+		//int bytes_sent=0;
+		int cfd=0;                                           //�ļ�������
+		int recbytes=0;
+		char buffer[MAXBUF]={0};	                          //���ܻ�����
+		struct sockaddr_in s_add;                   //�洢����˺ͱ��˵�ip���˿ڵ���Ϣ�ṹ��
+		uint16 serverport=0;
+		uint8 rc=0;
+		uint8 Rx_msgnum=0;
+		msgform msg_Rxque;
+		cJSON *root;
+	    char *out=NULL;
+
+		serverport=SERVER_PORT;
+
+		cfd = socket(AF_INET, SOCK_STREAM, 0);           //����socket ʹ����������TCP������
+		if(cfd == -1 )
+		{
+			printf("server socket fail ! \r\n");
+			return -1;
+		}
+		printf("server socket ok !\r\n");
+
+		bzero(&s_add,sizeof(struct sockaddr_in));        //����������˵�ip�Ͷ˿���Ϣ������ṹ����Բ�����
+		s_add.sin_family=AF_INET;
+		s_add.sin_addr.s_addr= inet_addr(SERVER_IPADDR);
+		s_add.sin_port=htons(serverport);
+
+		printf("server_addr = %#x ,serverport=: %#x\r\n",s_add.sin_addr.s_addr,s_add.sin_port); // �����ӡ������С�˺�����ƽʱ���������෴�ġ�
+
+		if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )// �ͻ������ӷ���������������Ϊsocket�ļ�����������ַ��Ϣ����ַ�ṹ��С
+		{
+			printf("server connect fail !\r\n");
+			return -1;
+		}
+		else
+		{
+		  printf("server socket connect ok ! rc=%d\r\n",rc);
+
+		  if(server_heart_flag==enable)
+		    {
+			  server_heart_flag=disable;
+			  printf("send heart beat\n");
+			  root=cJSON_CreateObject();
+
+			  cJSON_AddNumberToObject(root,"MsgType", HeartReportMsg);
+			  cJSON_AddNumberToObject(root,"Sn",ServerHeart_sn);
+			  out=cJSON_PrintUnformatted(root);
+			  cJSON_Delete(root);
+			  printf("out=%s\n",out);
+			  send(cfd,out,strlen(out),MSG_DONTWAIT);
+			  //send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
+			 }
+
+		   Rx_msgnum=msgrcv(MsgserverTxId,&msg_Rxque,sizeof(msgform),0,0);
+		   printf("server msg_Rxque.mtype=%04x\n",msg_Rxque.mtype);
+		   printf("server Rx_msgnum=%d\n",Rx_msgnum);
+		   if(Rx_msgnum!=0)
+		 	{
+		 		 package_json_server(&msg_Rxque,Rx_msgnum,cfd);
+
+		    }
+
+
+		  memset(buffer,0,MAXBUF);
+          recbytes = recv(cfd, buffer, MAXBUF,0);
+          DBG_PRINT("recbytes= %d\n",recbytes);
+		  if(recbytes==-1)
+		  {
+			printf("server read data fail !\r\n");
+			return -1;
+		  }
+         else if(recbytes>0)
+		  {
+            //DBG_PRINT("3333\n");
+		    printf("server rxbuffer=%s\r\n",buffer);
+		    if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
+		    { parse_json_server(buffer,recbytes);}
+		    else
+		    {printf("receive server data error\n");}
+       	  }
+
+	   }
+		close(cfd);
+		return 0;
+}
+
+
+
+
+
+
