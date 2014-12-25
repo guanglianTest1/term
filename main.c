@@ -26,7 +26,7 @@
 int main()
 {
 	
-
+//this is test
 	sysInit();
 	
 	//ConnectClient();
