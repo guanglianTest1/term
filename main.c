@@ -29,7 +29,7 @@ int main()
 //this is test
 	sysInit();
 	
-	//ConnectClient();
+	ConnectClient();
    
 	
 	pthread_create(&client_thread,NULL,client_msg_thread,NULL);   //���������ͨ���߳�
