@@ -24,26 +24,29 @@
 
 
 #define CLIENT_PORT    5030  //��ͻ���ͨ�Ŷ˿�
-#define NODE_PORT      5018  //��ڵ��豸ͨ�Ŷ˿�
+//#define NODE_PORT      5018  //��ڵ��豸ͨ�Ŷ˿�
+#define NODE_PORT      5002  //��ڵ��豸ͨ�Ŷ˿�
 //#define SERVER_PORT    5031  //�������ͨ�Ŷ˿�
 #define SERVER_PORT    5040  //�������ͨ�Ŷ˿�
 
 //#define GATEWAY_IPADDR   "192.168.0.102"
 //#define SERVER_IPADDR  "192.168.0.100"
-#define GATEWAY_IPADDR   "192.168.1.112"
-#define SERVER_IPADDR  "192.168.1.121"
+#define GATEWAY_IPADDR   "192.168.1.137"
+#define SERVER_IPADDR  "192.168.1.111"
 
 #define MAX_CLIENT_NUM 16   //���ͻ���������
 
 
+//#define NODE_NUM 2
 #define NODE_NUM 2
 #define NODE_LEN 10
 #define IE_LEN   20
 
-#define TERM_NUM 3
+//#define TERM_NUM 3
+#define TERM_NUM 2
 #define TERM_LEN 6
 
-
+#define  INFOLEN 64
 
 typedef struct{
 int client_socket;
@@ -54,6 +57,12 @@ uint16 client_buff_len;
 }client_status;
 
 
+/***********************************************************************/
+//add yanly141229
+//typedef enum connect_gw_SocketStatus
+//{
+//
+//};
 
 
 
@@ -61,7 +70,6 @@ uint16 client_buff_len;
 
 
 
-#define  INFOLEN 64
 
 
 
@@ -151,16 +159,18 @@ typedef struct {
 		}node_list;
 #endif
 
-void *client_msg_thread();
-void *client_type_thread();
-//void *client_msg_thread();
-void *node_msg_thread() ;
-void *server_msg_thread();
+//void ConnectClient();
+extern int ConnectClient();
+//extern void *client_msg_thread(void *p);
+extern void *client_type_thread(void *p);
 
+extern void *node_msg_thread(void *p) ;
+extern void *server_msg_thread(void *p);
+extern void node_msg_process();
+extern void server_msg_process();
+extern int nodeSocket();
+extern int ServerSocket();
 
-int nodeSocket();
-int ServerSocket();
-
-
-
+extern void *handle_connect(void *argv);
+extern void *handle_request(void *argv);
 #endif

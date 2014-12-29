@@ -26,6 +26,10 @@
 #include<errno.h>
 #include<fcntl.h>
 #include<limits.h>
+#include <sys/select.h>
+#include <signal.h>
+#include <time.h>
+
 #include"json.h"
 #include"cJSON.h"
 #include"net.h"
@@ -33,6 +37,8 @@
 #include"HttpModule.h"
 #include"term.h"
 #include"sysinit.h"
+
+
 
 
 
@@ -51,9 +57,9 @@ uint8 Client_Sn=0;
 int Client_Socket=0;
 uint8 listen_thread_isover=0;
 
-uint16 client_num=0;
 
-#if 1
+
+#if 0
 node_list node_table[NODE_NUM]={
 		                        {"1234567890","ce75",{{{0x00,0x00,0x00,0x11,0x25,0x52},1,"was",60,0,0,0,0,0,0,0,0},{{0x00,0x00,0x12,0x34,0x56,0x78},2,"water",60,0,0,0,0,0,0,0,0},{{0xaa,0x12,0x34,0x56,0x78,0x90},3,"water",60,0,0,0,0,0,0,0,0}}},
 		                        {"1234567890","7436",{{{0x04,0x04,0x04,0x04,0x04,0x04},1,"war",60,0,0,0,0,0,0,0,0},{{0x05,0x05,0x05,0x05,0x05,0x05},2,"water",60,0,0,0,0,0,0,0,0},{{0x06,0x06,0x06,0x06,0x06,0x06},2,"water",60,0,0,0,0,0,0,0,0}}}
@@ -61,14 +67,40 @@ node_list node_table[NODE_NUM]={
 uint8 Term_Num[NODE_NUM]={3,3};
 #endif
 
+#if 1
+node_list node_table[NODE_NUM]={0};
+
+uint8 Term_Num[NODE_NUM]={0};
+#endif
+
+pthread_t thread_do[2];  //pthread id
+//int handle_connect(int sockfd);
+//int handle_request();
+void *handle_connect(void *argv);
+void *handle_request(void *argv);
+void sig_process(int signo);
+void sig_pipe(int signo);
+/****************************************************************************/ //add yanly141229
+int	connect_to_gateway_init(void);
+
+
+
 //uint8 node_ip[20]="192.168.0.102";
 client_status client_list[MAX_CLIENT_NUM];
-void *client_type_thread()
+int connect_host[MAX_CLIENT_NUM];//add yanly141229
+uint16 client_num=0;   //how many client socket
+//int connect_number = 0;
+
+void client_type_socket()
+{   pthread_t client_type;
+	pthread_create(&client_type,NULL,client_type_thread,NULL);
+}
+void *client_type_thread(void *p)
 {
   msgform term_msg;
   uint8 msgsize;
   uint8 term_code[TERM_LEN]={0};
-  uint8 node_id[TERM_LEN]={0};
+  uint8 node_id[NODE_LEN]={0};
   uint8 i=0;
   while(1)
   	{
@@ -143,213 +175,295 @@ void *client_type_thread()
   return 0;
 }
 
-void *client_msg_thread()
 
-{
-    struct sockaddr_in servaddr;
-    int s32Rtn;
-    int s32Socket_value = 1;
-    int Recvsize_2 = 0;
-    unsigned int pTcpPort;
-    int sockfd;
-	char receive_buf[MAXBUF];
-	//uint8 i=0;
-
-    pTcpPort =CLIENT_PORT;
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) 
-    { perror("client socket error!");}
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &s32Socket_value,sizeof(int)) == -1) 
-    { printf("client set socketopt err!!!!\n");
-	  //goto ERR;
-    }
-
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(pTcpPort);
-
-    s32Rtn = bind(sockfd, (struct sockaddr *) &servaddr,sizeof(struct sockaddr_in));
-    if (s32Rtn < 0)
-    { printf(" ****listen client  connected  listening on port %d, bind err, %d !!!!\n", pTcpPort,s32Rtn);
-       // goto ERR;
-    }
-    else
-    {
-        printf(" **** listen client connected  listening on port %d \n", pTcpPort);
-    }
-
-    s32Rtn = listen(sockfd, 5);
-    if (s32Rtn < 0) 
-    {
-        printf("client listening on port %d, listen err, %d \n", pTcpPort,s32Rtn);
-	    //goto ERR;
-    }
-    else
-    printf("---listen client connected thread start----\r\n");
-
-	memset(receive_buf,0,MAXBUF);
-	memset(client_list,0,sizeof(client_status));
-	//for(i=0;i<MAX_CLIENT_NUM;i++)
-    //{
-	//client_list[i].client_count=0;
-     //
-   // }
-    while ((client_list[client_num].client_socket= accept(sockfd, NULL, 0)) >= 0) //等待客户端链接
-	//while ((client_list[client_num].client_socket= accept(sockfd, (struct sockaddr *)&newaddr,sizeof(struct sockaddr_in))) >= 0) //等待客户端链接
-    { 
-		printf(" client connected success \n ");
-		Recvsize_2 = recv(client_list[client_num].client_socket, receive_buf,sizeof(receive_buf), 0);
-        printf("***Recvsize_2=%d ****\r\n",Recvsize_2);
-        printf("***client_socket=%02x ****\r\n",client_list[client_num].client_socket);
-        printf("***client_num=%d ****\r\n",client_num);
-        //if(receive_buf != NULL)
-        if(Recvsize_2 != 0)
-        {
-
-          if((receive_buf[0]=='{')&&(receive_buf[Recvsize_2-1]))
-            {printf("receive json=%s\r\n",receive_buf);
-           // printf("***receive client json ****\r\n");
-			
-            memcpy(client_list[client_num].client_buff,receive_buf,Recvsize_2);
-
-            printf("**client_buff=%s ****\r\n",client_list[client_num].client_buff);
-
-			client_list[client_num].client_buff_len=Recvsize_2;
-
-            parse_json_client(client_list[client_num].client_buff,client_list[client_num].client_buff_len,client_list[client_num].client_socket);
-          }
-          else
-          {printf("receive client data error\n");}
-            
-        }//if(receive_buf != NULL)
-        else
-        {
-        	//close(client_list[client_num].client_socket);
-        	//close(sockfd);
-            //response_msg(open_channel,client_list[client_num].client_socket);
-            printf("**** client socket receive data error !!!!\r\n");
-        }
-
-        //printf("***Recvsize_2=%d ****\r\n",Recvsize_2);
-        if (client_list[client_num].client_socket < 0)
-         {
-        	//close(client_list[client_num].client_socket);
-        	//close(sockfd);
-        	printf("****MTCP listening on port %d,accept err, %d!!!!\n", pTcpPort,client_list[client_num].client_socket);
-        	//goto ERR;
-          }
-
-		client_num++;
-		if(client_num>MAX_CLIENT_NUM)
-		{
-		 client_num=0;
-		}
-       // continue;
-    }
-
+//void ConnectClient()
+//{
+//	pthread_t client_thread;
+//	pthread_create(&client_thread,NULL,client_msg_thread,NULL);
+//}
+//void *client_msg_thread(void *p)
+//int ConnectClient()
+//{
+//    struct sockaddr_in servaddr;
+//    int s32Rtn;
+//    int s32Socket_value = 1;
+//
+//    unsigned int pTcpPort;
+//    int sockfd;
+////	char receive_buf[MAXBUF];
+////	 int Recvsize_2 = 0;
+//	uint8 i=0;
+//	//pthread_t thread_do[2];
+//	 for(i=0;i<MAX_CLIENT_NUM;i++)
+//	 {
+//		 client_list[i].client_socket=-1;
+//	 }
+//	 signal(SIGINT, sig_process);
+//	 signal(SIGPIPE, sig_pipe);
+//    pTcpPort =CLIENT_PORT;
+//    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+//    if (sockfd == -1)
+//    { perror("client socket error!");}
+//
+////    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &s32Socket_value,sizeof(int)) == -1)
+////    { printf("client set socketopt err!!!!\n");
+////	  goto ERR;
+////    }
+//
+//    memset(&servaddr, 0, sizeof(servaddr));
+//    servaddr.sin_family = AF_INET;
+//    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+//    servaddr.sin_port = htons(pTcpPort);
+//
+//    s32Rtn = bind(sockfd, (struct sockaddr *) &servaddr,sizeof(struct sockaddr_in));
+//    if (s32Rtn < 0)
+//    {
+//    	printf(" ****listen client  connected  listening on port %d, bind err, %d !!!!\n", pTcpPort,s32Rtn);
+//    	goto ERR;
+//    }
+//    else
+//    {
+//        printf(" **** listen client connected  listening on port %d \n", pTcpPort);
+//    }
+//
+//    s32Rtn = listen(sockfd, 5);
+//    if (s32Rtn < 0)
+//    {
+//        printf("client listening on port %d, listen err, %d \n", pTcpPort,s32Rtn);
+//	    goto ERR;
+//    }
+//    return sockfd;
+//   // else
+//    	//printf("---listen client connected thread start----\r\n");
+//
+//	//memset(receive_buf,0,MAXBUF);
+//	//memset(client_list,0,sizeof(client_status));
+//
+////while(1)
+//	//{
+//
+//	  //handle_connect(sockfd);
+//	  //handle_request();
+//	  //printf(" yyyyyyyyy\n ");
+////	  pthread_create(&thread_do[0], NULL, handle_connect, (void*)&sockfd);
+////	  pthread_create(&thread_do[1], NULL, handle_request, NULL);
+//      // break;
+//	//}
 //ERR:
-      //close(client_list[client_num].client_socket);
-	 // close(sockfd);
-  //    printf(" socket connected thread stop \n ");
-      //listen_thread_isover = 1;
-     return 0;
+//      //close(client_list[client_num].client_socket);
+//	  //close(sockfd);
+//  //    printf(" socket connected thread stop \n ");
+//      listen_thread_isover = 1;
+//     return 0;
+//}
+int ConnectClient()
+{
+	int s_s;
+	int optval =1;
+	struct sockaddr_in local;
+	memset(connect_host, -1, MAX_CLIENT_NUM);
+	//SETUP tcp socket
+	s_s = socket(AF_INET, SOCK_STREAM, 0);
+	if (setsockopt(s_s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1)//允许重复使用本地地址和端口?
+	{
+		perror("setsockopt");
+		exit(1);
+	}
+	printf("server fd:%d\n",s_s);
+	//server_fd =s_s;
+	//init addr
+	memset(&local, 0, sizeof(local));
+	local.sin_family = AF_INET;
+    local.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr(argv[1]);//htonl(INADDR_ANY); //local addr anyway
+    local.sin_port = htons(CLIENT_PORT);
+
+    //bind
+    bind(s_s, (struct sockaddr *)&local, sizeof(local));
+    listen(s_s, 5);
+    return s_s;
 }
 
+void node_msg_process()
+{
+	pthread_t node_thread;
+	pthread_create(&node_thread,NULL,node_msg_thread,NULL);
 
-
-
-void *node_msg_thread()
+}
+void *node_msg_thread(void *p)
 {
 
   while(1)
   {
 	  nodeSocket();
   }
-  return 0;
+  return NULL;
 }
 
-
-void *server_msg_thread()
+void server_msg_process()
+{
+	pthread_t server_thread;
+	pthread_create(&server_thread,NULL,server_msg_thread,NULL);
+}
+void *server_msg_thread(void *p)
 {
 
   while(1)
   {
 	  ServerSocket();
   }
-  return 0;
+  return NULL;
 }
 
 
+//int nodeSocket()
+//    {
+//        uint8 msg[20] = "0200070007";
+//		//int bytes_sent=0;
+//		int cfd=0;                                           //�ļ�������
+//		int recbytes=0;
+//		char buffer[MAXBUF]={0};	                          //���ܻ�����
+//		struct sockaddr_in s_add;                   //�洢����˺ͱ��˵�ip���˿ڵ���Ϣ�ṹ��
+//		uint16 nodeport=0;
+//		uint8 rc=0;
+//		//cJSON *root;
+//	    //char *out=NULL;
+//
+//		nodeport=NODE_PORT;
+//	    //nodeport=5002;
+//		cfd = socket(AF_INET, SOCK_STREAM, 0);           //����socket ʹ����������TCP������
+//		if(cfd == -1 )
+//		{
+//			printf("node socket fail ! \r\n");
+//			return -1;
+//		}
+//		printf("node socket ok !\r\n");
+//
+//		bzero(&s_add,sizeof(struct sockaddr_in));        //����������˵�ip�Ͷ˿���Ϣ������ṹ����Բ�����
+//		s_add.sin_family=AF_INET;
+//		s_add.sin_addr.s_addr= inet_addr(GATEWAY_IPADDR);    //ipת��Ϊ4�ֽ����Σ�ʹ��ʱ��Ҫ���ݷ����ip���и���
+//		s_add.sin_port=htons(nodeport);
+//
+//		printf("node_addr = %#x ,nodeport=: %#x\r\n",s_add.sin_addr.s_addr,s_add.sin_port); // �����ӡ������С�˺�����ƽʱ���������෴�ġ�
+//
+//		if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )// �ͻ������ӷ���������������Ϊsocket�ļ�����������ַ��Ϣ����ַ�ṹ��С
+//		{
+//			printf("node connect fail !\r\n");
+//			return -1;
+//		}
+//		else
+//		{
+//		  printf("node socket connect ok ! rc=%d\r\n",rc);
+//		  if(node_heart_flag==enable)
+//		    {
+//			  node_heart_flag=disable;
+//			  printf("send node heart beat\n");
+//			  send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
+//			 }
+//
+//		  memset(buffer,0,MAXBUF);
+//          recbytes = recv(cfd, buffer, MAXBUF,0);     //���ӳɹ�,�ӷ���˽����ַ�
+//          DBG_PRINT("recbytes= %d\n",recbytes);
+//
+//		  if(recbytes==-1)
+//		  {
+//			printf("node read data fail !\r\n");
+//			return -1;
+//		  }
+//         else if(recbytes>0)
+//		  {
+//            //DBG_PRINT("3333\n");
+//		    printf("node rxbuffer=%s\r\n",buffer);
+//		    if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
+//	        {parse_json_node(buffer,recbytes);}
+//		    else
+//		    {printf("receive node data error\n");}
+//       	  }
+//
+//	}
+//		//close(cfd);
+//		return 0;
+//
+//}
+int connect_to_gateway_init(void)
+{
+	int cfd=0;
+	struct sockaddr_in s_add;
+	uint8 rc=0;
+	cfd = socket(AF_INET, SOCK_STREAM, 0);
+	if(cfd == -1 )
+	{
+		printf("node socket fail ! \r\n");
+		return -1;
+	}
+	bzero(&s_add,sizeof(struct sockaddr_in));
+	s_add.sin_family=AF_INET;
+	s_add.sin_addr.s_addr= inet_addr(GATEWAY_IPADDR);
+	s_add.sin_port=htons(NODE_PORT);
+	if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )
+	{
+		printf("node connect fail !\r\n");
+		return -1;
+	}
+	return rc;
+}
 int nodeSocket()
-    {   
-        uint8 msg[20] = "0200070007";
-		//int bytes_sent=0;
-		int cfd=0;                                           //�ļ�������
-		int recbytes=0;
-		char buffer[MAXBUF]={0};	                          //���ܻ�����
-		struct sockaddr_in s_add;                   //�洢����˺ͱ��˵�ip���˿ڵ���Ϣ�ṹ��
-		uint16 nodeport=0;
-		uint8 rc=0;
-		//cJSON *root;
-	    //char *out=NULL;
-
-
-		nodeport=NODE_PORT;
-	    //nodeport=5002;
-		cfd = socket(AF_INET, SOCK_STREAM, 0);           //����socket ʹ����������TCP������ 
-		if(cfd == -1 )
+{
+	uint8 msg[20] = "0200070007";
+	int cfd;
+	int buffer[1024];
+	int recbytes;
+	int s_status;
+	int r_status;
+	cfd = connect_to_gateway_init();
+	memset(buffer,0,MAXBUF);
+	while(cfd)// connected
+	{
+		if(node_heart_flag == enable)
 		{
-			printf("node socket fail ! \r\n");
-			return -1;
+			node_heart_flag=disable;
+			printf("send node heart beat\n");
+			s_status = send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
+			if(s_status ==-1)
+			{
+				perror("connected gateway 5002,but send error\n");
+				return -1;
+			}
+			else if(s_status ==0)
+			{
+				printf("connected gateway 5002,but the other side close this socket\n");
+				return -2;
+			}
+			else
+			{}//normal send
 		}
-		printf("node socket ok !\r\n");
-		
-		bzero(&s_add,sizeof(struct sockaddr_in));        //����������˵�ip�Ͷ˿���Ϣ������ṹ����Բ�����
-		s_add.sin_family=AF_INET;
-		s_add.sin_addr.s_addr= inet_addr(GATEWAY_IPADDR);    //ipת��Ϊ4�ֽ����Σ�ʹ��ʱ��Ҫ���ݷ����ip���и���
-		s_add.sin_port=htons(nodeport);
-		 	
-		printf("node_addr = %#x ,nodeport=: %#x\r\n",s_add.sin_addr.s_addr,s_add.sin_port); // �����ӡ������С�˺�����ƽʱ���������෴�ġ�
-
-		if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )// �ͻ������ӷ���������������Ϊsocket�ļ�����������ַ��Ϣ����ַ�ṹ��С
+		recbytes = recv(cfd, buffer, MAXBUF,0);     //���ӳɹ�,�ӷ���˽����ַ�
+		if(recbytes==-1)
 		{
-			printf("node connect fail !\r\n");
-			return -1;
-		}
-		else
-		{
-		  printf("node socket connect ok ! rc=%d\r\n",rc);
-		  if(node_heart_flag==enable)
-		    {
-			  node_heart_flag=disable;
-			  printf("send heart beat\n");
-			  send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
-			 }
-
-		  memset(buffer,0,MAXBUF);
-          recbytes = recv(cfd, buffer, MAXBUF,0);     //���ӳɹ�,�ӷ���˽����ַ�
-          DBG_PRINT("recbytes= %d\n",recbytes);
-
-		  if(recbytes==-1)
-		  {
 			printf("node read data fail !\r\n");
 			return -1;
-		  }
-         else if(recbytes>0)
-		  {
-            //DBG_PRINT("3333\n");
-		    printf("node rxbuffer=%s\r\n",buffer);
-		    if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
-	        {parse_json_node(buffer,recbytes);}
-		    else
-		    {printf("receive node data error\n");}
-       	  }
+		}
+		else if(recbytes>0)
+		{
+//			printf("node rxbuffer=%s\r\n",buffer);
+//			if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
+//			{
+//				parse_json_node(buffer,recbytes);
+//			}
+//			else
+//			{
+//				printf("receive node data error\n");
+//			}
+//			memset(buffer,0,MAXBUF);
+		}
+		else if(recbytes==0)
+		{
+			printf("connected gateway 5002,but the other side close this socket\n");
+			return -2;
+		}
 
 	}
-		close(cfd);
-		return 0;
+	//close(cfd);
+	return 0;
 
 }
 
@@ -396,10 +510,11 @@ int ServerSocket()
 		{
 		  printf("server socket connect ok ! rc=%d\r\n",rc);
 
-		  if(server_heart_flag==enable)
+		//  if(server_heart_flag==enable)
+		  if(0)
 		    {
 			  server_heart_flag=disable;
-			  printf("send heart beat\n");
+			  printf("send server heart beat\n");
 			  root=cJSON_CreateObject();
 
 			  cJSON_AddNumberToObject(root,"MsgType", HeartReportMsg);
@@ -440,12 +555,233 @@ int ServerSocket()
        	  }
 
 	   }
-		close(cfd);
+		//close(cfd);
 		return 0;
 }
 
 
+//int handle_connect(int sockfd)
+void *handle_connect(void *argv)
+{
+//
+//	int s_s = *((int *)argv);
+//	struct sockaddr_in from;
+//	socklen_t len = sizeof(from);
+//	for(;;)
+//	  {
+//		int i = 0;
+//		int s_c;
+//		if((s_c = accept(s_s, (struct sockaddr*)&from, &len))>0)
+//		{
+//			printf("a client connect,from: %s\n",inet_ntoa(from.sin_addr));
+//			//put the client socket to connect_host
+//			for(i=0; i<MAX_CLIENT_NUM; i++)
+//			{
+//				if(connect_host[i] == -1)
+//				{
+//					connect_host[i] = s_c;
+//					client_num ++;
+//
+//				}
+//			}
+//			//break;
+//		  }
+//	   }
+//		return NULL;
+	int s_s = *((int *)argv);
+	struct sockaddr_in from;
+	socklen_t len = sizeof(from);
+	for(;;)
+	{
+		int i = 0;
+		int s_c = accept(s_s, (struct sockaddr*)&from, &len);
+		printf("a client connect,from: %s,sock:%d \n",inet_ntoa(from.sin_addr),s_c);
+		//put the client socket to connect_host
+		for(i=0; i<MAX_CLIENT_NUM; i++)
+		{
+			if(connect_host[i] == -1)
+			{
+				connect_host[i] = s_c;
+				client_num ++;
+				break;
+			}
+		}
+	}
+	return NULL;
+}
+void *handle_request(void *argv)
+{
+	char buff[MAXBUF];
+	char respondBUff[1024];
+	int n=0;
+	int maxfd =-1;
+	fd_set scanfd;
+	struct timeval timeout;
+	timeout.tv_sec =1;
+	timeout.tv_usec =0;
+	int i =0;
+	int err = -1;
+	int __buffType;
 
+	for(;;)
+	{
+		maxfd =-1;
+		FD_ZERO(&scanfd);
+		for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+		{
+			if(connect_host[i] !=-1)
+			{
+				FD_SET(connect_host[i], &scanfd);
+				if(maxfd< connect_host[i])
+				{
+					maxfd = connect_host[i];
+				}
+			}
+		}
+		//select wait socket
+		err = select(maxfd+1, &scanfd, NULL, NULL, &timeout);
+		switch(err)
+		{
+			case 0:	break;		//timeout
+			case -1: break;		//error happen
+			default:
+				if(client_num<=0)
+					break;
+				for(i=0; i<MAX_CLIENT_NUM; i++)
+				{
+					if(connect_host[i] !=-1)
+					{
+						if(FD_ISSET(connect_host[i], &scanfd))
+						{
+							memset(buff, 0, MAXBUF);
+							n = recv(connect_host[i], buff, MAXBUF, 0);
+							if(n>0)
+							{
+								printf("something recv ,size: %d, connect file:%d \n",n,connect_host[i]);
+								//printf("buff[0]=%d,buff[n-1]=%d \n",buff[0],buff[n-1]);
+								printf("sever recieve data:%s \n", buff);
+//									memcpy(client_list[i].client_buff,buff,n);
+//								    printf("**client_buff=%s ****\r\n",client_list[i].client_buff);
+//									client_list[i].client_buff_len=n;
+								__buffType = detach_interface_msg_client(buff, n);//detach interface
+								switch(__buffType)
+								{
+									case  DETACH_PRASE_ERROR:
+										memcpy(respondBUff,"data format error:", 18);
+										memcpy(respondBUff+18,buff, n);
+										send(connect_host[i],respondBUff, n+18, 0);
+										break;
+									case  DETACH_MSGTYPE_ERROR:
+										memcpy(respondBUff,"data format error:", 18);
+										memcpy(respondBUff+18,buff, n);
+										send(connect_host[i],respondBUff, n+18, 0);
+										break;
+									case  DETACH_BELONG_ENERGY:
+										//parse_json_client(buff, n, connect_host[i]);
+										break;
+									case  DETACH_BELONG_SECURITY:
+										client_msg_handle_security(buff, n, connect_host[i]);
+										break;
+								}
+								//send(connect_host[i],buff,strlen(buff),0);
+								memset(buff, 0, MAXBUF);
+							}
+						}
+					}
+				}
+			break;
+		}
+	}
+
+
+	//free
+	for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+		{
+			if(connect_host[i]!=-1)
+			{
+				close(connect_host[i]);
+			}
+		}
+	return NULL;
+	//return 0;
+}
+//int handle_request()
+#if 0
+void *handle_request(void *argv)
+{
+	char receive_buf[MAXBUF]={0};
+	int Recvsize_2 = 0,i=0;
+
+  while(1)
+ {
+	for(i=0;i<MAX_CLIENT_NUM;i++)
+	{
+		if(client_list[i].client_socket>=0)
+		{
+			Recvsize_2 = recv(client_list[i].client_socket, receive_buf,sizeof(receive_buf), 0);
+
+	        printf("***Recvsize_2=%d ****\r\n",Recvsize_2);
+	        printf("***client_socket=%02x ****\r\n",client_list[i].client_socket);
+	       // printf("***client_num=%d ****\r\n",client_num);
+	        //if(receive_buf != NULL)
+	        if(Recvsize_2 > 0)
+	        {
+
+	          //if((receive_buf[0]=='{')&&(receive_buf[Recvsize_2-1]=='}'))
+	        	if(receive_buf[0]=='{')
+	            {printf("receive json=%s\r\n",receive_buf);
+	           // printf("***receive client json ****\r\n");
+
+	            memcpy(client_list[i].client_buff,receive_buf,Recvsize_2);
+
+	            printf("**client_buff=%s ****\r\n",client_list[i].client_buff);
+
+				client_list[i].client_buff_len=Recvsize_2;
+
+	            parse_json_client(client_list[i].client_buff,client_list[i].client_buff_len,client_list[i].client_socket);
+	          }
+
+	          else
+	          {
+	        	  printf("receive client data error\n");
+	        	  //goto ERR;
+
+	          }
+
+
+	        }
+	        else
+	        {
+
+	            printf("**** client socket no receive data !!!!\r\n");
+	            //goto ERR;
+	        }
+
+	     }
+	  }
+		//break;
+	 }
+	 return NULL;
+
+}
+#endif
+void sig_process(int signo)
+{
+	int i;
+	for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+	{
+		if(connect_host[i]!=-1)
+		{
+			close(connect_host[i]);
+		}
+	}
+
+	_exit(0);
+}
+void sig_pipe(int signo)
+{
+	_exit(0);
+}
 
 
 

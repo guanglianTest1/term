@@ -242,7 +242,7 @@ void serialMsgDeal(uint8 *msgBuf,uint8 msg_len);
 void unpack_term_msg(uint8 *sdata,uint8 slen);
 
 int digit2time(char *timeStr, int iLen, tm *ptTime);
-
+void term_msg_process();
 
 
 
@@ -252,7 +252,8 @@ int digit2time(char *timeStr, int iLen, tm *ptTime);
 //extern void getsystm(void);
 //extern int prtfBuf(U8_T mod,U8_T *dataBuf, int length,char* info);
 
-
+/********************************************************************/
+extern void send_data_to_dev_security(char *nwkaddr, char num, char state);
 
 #endif/*End of _SHELL_H*/
 

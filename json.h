@@ -28,6 +28,11 @@
 
 #define  HEART_MSGTYPE  1
 
+/*client detach interface ***********************************************************///add yanly141229
+#define	DETACH_PRASE_ERROR					-1
+#define DETACH_MSGTYPE_ERROR				-2
+#define	DETACH_BELONG_ENERGY				0
+#define	DETACH_BELONG_SECURITY				1
 
 
 
@@ -37,5 +42,7 @@ void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket);
 void parse_json_node(char *text,uint8 textlen) ;
 void package_json_server(msgform *msg_Rxque ,uint8 Rx_msgnum,uint16 socketflg);
 void parse_json_server(char *text,uint8 textlen);
+
+extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
 
 #endif

@@ -285,8 +285,8 @@ cJSON *cJSON_ParseWithOpts(const char *value,const char **return_parse_end,int r
 cJSON *cJSON_Parse(const char *value) {return cJSON_ParseWithOpts(value,0,0);}
 
 /* Render a cJSON item/entity/structure to text. */
-char *cJSON_Print(cJSON *item)				{return print_value(item,0,1);}
-char *cJSON_PrintUnformatted(cJSON *item)	{return print_value(item,0,0);}
+char *cJSON_Print(cJSON *item)				{return print_value(item,0,1);}//将json对象转换成容易让人看清结构的字符串
+char *cJSON_PrintUnformatted(cJSON *item)	{return print_value(item,0,0);}//将json对象转换成一个很短的字符串，无回车
 
 /* Parser core - when encountering text, process appropriately. */
 static const char *parse_value(cJSON *item,const char *value)

@@ -44,6 +44,13 @@ uint8 native_sn=0;
 uint32 pwvalue=0;
 
 //term_list term_tab[TERM_NUM]={{"123",1,"ammeter",60,0,0,0,0,0,0,0,0},{"456",2,"lengwater",60,0,0,0,0,0,0,0,0}, {"789",2,"lengwater",60,0,0,0,0,0,0,0,0},{0},{0}};
+
+void term_msg_process()
+{
+	pthread_t term_thread;
+	pthread_create(&term_thread,NULL,term_msg_thread,NULL);
+}
+
 void *term_msg_thread(void *p)
 {
   //msgform term_msg;
@@ -251,7 +258,15 @@ uint8 SendDataToDev(uint8 *termid,uint8 *nodeid)
 	return datalen;
 /*FE FE FE 68 42 25 11 00 00 00 68 01 02 43 C3 51 16*/	
 }/*End of SendDataToDev*/
-
+void send_data_to_dev_security(char *nwkaddr, char num, char state)
+{
+	char buff[512] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
+	int b_len;
+	buff[10] = num;
+	buff[11] = state;
+	b_len = 12;
+	child_doit(buff,b_len,nwkaddr);
+}
 
 
 void termGetValResClient(uint8 *msgBuf)

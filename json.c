@@ -44,9 +44,51 @@ uint8 Rx_count2=0;
 
 char get_systime[128]={0};
 char *GatewayID="8888888";
-
-
 uint8 server_sn=0;
+
+//add yanly141229
+typedef void (* functionP_t) (cJSON *root, int fd);
+static void msghandle_security_config(cJSON *root, int fd);
+static void msghandle_security_config_check(cJSON *root, int fd);
+static void msghandle_sensor_state_check(cJSON *root, int fd);
+static void msghandle_switch_state_check(cJSON *root, int fd);
+static void msghandle_switch_state_ctrl(cJSON *root, int fd);
+
+const functionP_t normalTransaction[]=
+{
+	msghandle_security_config, //0x70
+	msghandle_security_config_check,
+	msghandle_sensor_state_check,
+	msghandle_switch_state_check,
+	msghandle_switch_state_ctrl
+};
+static void msghandle_security_config(cJSON *root, int fd){}
+static void msghandle_security_config_check(cJSON *root, int fd){}
+static void msghandle_sensor_state_check(cJSON *root, int fd){}
+static void msghandle_switch_state_check(cJSON *root, int fd){}
+static void msghandle_switch_state_ctrl(cJSON *root, int fd)
+{
+
+	cJSON *_root = root;
+//	int MsgType;
+	int Sn;
+	char *SecurityNodeID;
+	char *Nwkaddr;
+	int SwitchNum;
+	int SwitchStatus;
+	printf("msghandle_switch_state_ctrl\n");
+	Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
+	SecurityNodeID = cJSON_GetObjectItem(_root,"SecurityNodeID")->valuestring;
+	Nwkaddr = cJSON_GetObjectItem(_root,"Nwkaddr")->valuestring;
+	SwitchNum = cJSON_GetObjectItem(_root, "SwitchNum")->valueint;
+	SwitchStatus = cJSON_GetObjectItem(_root, "SwitchStatus")->valueint;
+
+	send_data_to_dev_security(Nwkaddr, SwitchNum, SwitchStatus);
+
+
+}
+
+/*********************************************************************************/
 uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket)
 {
  
@@ -69,7 +111,7 @@ uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket)
     uint8 termlen=0;
     uint8 tmp_code[TERM_LEN]={0};
     //uint8 termcode[TERM_LEN]={0};
-    uint8 EnergyNodeID[TERM_LEN]={0};
+    uint8 EnergyNodeID[NODE_LEN]={0};
     uint8 node_num=0;
     uint8 term_num=0;
 	printf("text=%s\n",text);
@@ -219,7 +261,59 @@ uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket)
       cJSON_Delete(root);
 	  return ret;
 }	 
+int detach_interface_msg_client(char *text,int textlen)
+{
+	int status;
+	cJSON *root;
+	int msgtype;
 
+	if((text[0]>=0x30)&&(text[0]<=0x39))
+	{
+		return DETACH_PRASE_ERROR;
+	}
+	root=cJSON_Parse(text);
+	if (!root)
+	{
+		printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
+		return DETACH_PRASE_ERROR;//need to return immediately 空指针需立即返回
+	}
+	msgtype = cJSON_GetObjectItem(root, "MsgType")->valueint;
+	if((msgtype>= 0x10)&&(msgtype<0x70))
+	{
+		status = DETACH_BELONG_ENERGY;
+	}
+	else if((msgtype>= 0x70)&&(msgtype<0x80))
+	{
+		status = DETACH_BELONG_SECURITY;
+	}
+	else
+	{
+		status = DETACH_MSGTYPE_ERROR;
+	}
+	cJSON_Delete(root);
+	return status;
+}
+int client_msg_handle_security(char *buff, int size, int fd)
+{
+	int MsgType;
+//	int Sn;
+//	char Nwkaddr[4];
+//	char SecurityNodeID[16];
+//	int SensorNum;
+//	int SwitchStatus;
+	cJSON *root;
+	int cfd = fd;
+
+	root=cJSON_Parse(buff);
+	if(root)
+	{
+		//printf("12345789\n");
+		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
+		normalTransaction[MsgType-112](root, cfd);
+	}
+    cJSON_Delete(root);
+    return 0;
+}
 
 void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket)
 {
@@ -232,7 +326,7 @@ void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket)
 	cJSON *NodeList=NULL;
 	cJSON* node=NULL;
 	char IEEID[INFOLEN]={0};
-	char EnergyNodeID[INFOLEN]={0};
+	char EnergyNodeID[NODE_LEN]={0};
 	char TermCode[TERM_LEN]={0};
 	char TermInfo[INFOLEN]={0};
 	char *Term_Code=NULL;
@@ -557,7 +651,7 @@ void parse_json_server(char *text,uint8 textlen)
 
 
 	cJSON_Delete(root);
-    //return;
+    return;
 }
 
 void package_json_server(msgform *msg_Rxque ,uint8 Rx_msgnum,uint16 socketflg)
