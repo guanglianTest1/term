@@ -33,7 +33,7 @@ struct Timer           //Timer�ṹ�壬��������һ����
 void setTimer(int t,int f);
 void timeout()	;
 void *time_t_thread(void *p) ;
-
+void time_t_process();
 
 
 #endif

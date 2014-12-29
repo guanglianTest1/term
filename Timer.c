@@ -93,7 +93,12 @@
 	 }
  }
   
- 
+void time_t_process()
+ {
+	 pthread_t time_thread;
+	 pthread_create(&time_thread,NULL,time_t_thread,NULL);
+
+ }
  void *time_t_thread(void *p)     
  { 
  
