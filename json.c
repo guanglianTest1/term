@@ -13,6 +13,7 @@
 #include<stdlib.h>
 #include<sys/socket.h>
 #include<netinet/in.h>
+#include<unistd.h>
 #include<arpa/inet.h>
 #include<netdb.h>
 #include"pthread.h"
@@ -772,6 +773,7 @@ int parse_json_node_security(char *text,int textlen)
 	int s_len;
 	int i;
 
+
     root=cJSON_Parse(text);
 	if (!root)
     {
@@ -793,7 +795,12 @@ int parse_json_node_security(char *text,int textlen)
 				printf("data=%s\n",data);
 
 				databuf_len=strlen(data)/2;
-				databuf=(uint8 *)malloc(sizeof(uint8)*databuf_len);
+				databuf=(uint8 *)malloc(sizeof(uint8)*40);//databuf=(uint8 *)malloc(sizeof(uint8)*databuf_len);
+				//之前没有修改前一直会出现malloc(): memory corruption (fast)的问题；具体触发原因不详，猜测databuf_len传入有问题？！
+				if(databuf ==NULL)
+				{
+					printf("malloc fail!\n");
+				}
 				printf("databuf= ");
 				for(i=0;i<databuf_len;i++)
 				{
@@ -803,56 +810,53 @@ int parse_json_node_security(char *text,int textlen)
 				printf("databuf_len=%d \n",databuf_len);
 
 				//handle msg:
+				sroot=cJSON_CreateObject();
 				switch (databuf[1])
 				{
 					case 0x00://传感器上传的
-//						printf("upload :node sensor upload\n");
-//						sensornum = databuf[databuf_len-2];
-//						sensorstatus = databuf[databuf_len-1];
-//						sroot=cJSON_CreateObject();
-//						cJSON_AddNumberToObject(sroot,"MsgType",				118);
-//						cJSON_AddNumberToObject(sroot,"Sn",						10);
-//						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
-//						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
-//						cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
-//						cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
-//						sout = cJSON_Print(sroot);
-//						cJSON_Delete(sroot);
-//						printf("%s\n",sout);
-//						s_len = strlen(sout);
-//						//发送给所有在线客户端
-//						send_msg_to_all_client(sout, s_len);
-//						//发送给云代理服务器  141230
-//						//....no do
-//						//响应给节点
-//						upload_sensor_change_respond(Nwkaddr, databuf, databuf_len);
-//						free(sout);
-//						free(databuf);
-						break;
-					case 0x02://控制智能插座的响应
-						printf("respond :ctrl switch\n");
-						switchnum = databuf[databuf_len-2];
-						switchstatus = databuf[databuf_len-1];
-						sroot=cJSON_CreateObject();
-						cJSON_AddNumberToObject(sroot,"MsgType",				117);
+						printf("upload :node sensor upload\n");
+						sensornum = databuf[databuf_len-2];
+						sensorstatus = databuf[databuf_len-1];
+						cJSON_AddNumberToObject(sroot,"MsgType",				118);
 						cJSON_AddNumberToObject(sroot,"Sn",						10);
 						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
 						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
-						cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
-						cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
-						sout = cJSON_Print(sroot);
-						cJSON_Delete(sroot);
+						cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
+						cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
+						sout = cJSON_PrintUnformatted(sroot);
 						printf("%s\n",sout);
 						s_len = strlen(sout);
 						//发送给所有在线客户端
 						send_msg_to_all_client(sout, s_len);
 						//发送给云代理服务器  141230
 						//....no do
-						free(sout);
-						free(databuf);
+						//响应给节点
+						upload_sensor_change_respond(Nwkaddr, databuf, databuf_len);
 						break;
-					default:break;
+					case 0x02://控制智能插座的响应
+						printf("respond :ctrl switch\n");
+						switchnum = databuf[databuf_len-2];
+						switchstatus = databuf[databuf_len-1];
+						cJSON_AddNumberToObject(sroot,"MsgType",				117);
+						cJSON_AddNumberToObject(sroot,"Sn",						10);
+						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+						cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
+						cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
+						sout = cJSON_PrintUnformatted(sroot);
+						printf("%s\n",sout);
+						s_len = strlen(sout);
+						//发送给所有在线客户端
+						send_msg_to_all_client(sout, s_len);
+						//发送给云代理服务器  141230
+						//....no do
+						break;
+					default:
+						break;
 				}
+				cJSON_Delete(sroot);
+				free(databuf);
+				free(sout);
 				break;
 
 			case HEART_MSGTYPE:

@@ -45,5 +45,5 @@ void parse_json_server(char *text,uint8 textlen);
 
 extern int parse_json_node_security(char *text,int textlen);
 extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
-
+extern int client_msg_handle_security(char *buff, int size, int fd);
 #endif
