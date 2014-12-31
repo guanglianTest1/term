@@ -258,14 +258,9 @@ uint8 SendDataToDev(uint8 *termid,uint8 *nodeid)
 	return datalen;
 /*FE FE FE 68 42 25 11 00 00 00 68 01 02 43 C3 51 16*/	
 }/*End of SendDataToDev*/
-void send_data_to_dev_security(char *nwkaddr, char num, char state)
+void send_data_to_dev_security(char *nwkaddr, char *text, int text_len)
 {
-	char buff[512] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
-	int b_len;
-	buff[10] = num;
-	buff[11] = state;
-	b_len = 12;
-	child_doit(buff,b_len,nwkaddr);
+	child_doit(text,text_len,nwkaddr);
 }
 
 

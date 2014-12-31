@@ -16,6 +16,8 @@
 #include<arpa/inet.h>
 #include<netdb.h>
 #include"pthread.h"
+
+
 #include"net.h"
 #include"json.h"
 #include"cJSON.h"
@@ -53,6 +55,10 @@ static void msghandle_security_config_check(cJSON *root, int fd);
 static void msghandle_sensor_state_check(cJSON *root, int fd);
 static void msghandle_switch_state_check(cJSON *root, int fd);
 static void msghandle_switch_state_ctrl(cJSON *root, int fd);
+//
+//send respond to node
+static void upload_sensor_change_respond(char *addr, char *text, int text_len);
+
 
 const functionP_t normalTransaction[]=
 {
@@ -76,17 +82,32 @@ static void msghandle_switch_state_ctrl(cJSON *root, int fd)
 	char *Nwkaddr;
 	int SwitchNum;
 	int SwitchStatus;
+	char buff[30] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
+	int b_len;
+
 	printf("msghandle_switch_state_ctrl\n");
 	Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
 	SecurityNodeID = cJSON_GetObjectItem(_root,"SecurityNodeID")->valuestring;
 	Nwkaddr = cJSON_GetObjectItem(_root,"Nwkaddr")->valuestring;
 	SwitchNum = cJSON_GetObjectItem(_root, "SwitchNum")->valueint;
 	SwitchStatus = cJSON_GetObjectItem(_root, "SwitchStatus")->valueint;
+	buff[10] = SwitchNum;
+	buff[11] = SwitchStatus;
+	b_len = 12;
 
-	send_data_to_dev_security(Nwkaddr, SwitchNum, SwitchStatus);
-
+	send_data_to_dev_security(Nwkaddr, buff, b_len);
 
 }
+//////////////
+static void upload_sensor_change_respond(char *addr, char *text, int text_len)
+{
+	char buff[11] ={0x00,0x02,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00};
+	int b_len = 11;
+	buff[10] = text[9];
+	printf("sensor num%d\n",buff[10]);
+	send_data_to_dev_security(addr, buff, b_len);
+}
+
 
 /*********************************************************************************/
 uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket)
@@ -303,6 +324,9 @@ int client_msg_handle_security(char *buff, int size, int fd)
 //	int SwitchStatus;
 	cJSON *root;
 	int cfd = fd;
+	cJSON *sroot;
+	char *sout;
+	int i;
 
 	root=cJSON_Parse(buff);
 	if(root)
@@ -310,6 +334,28 @@ int client_msg_handle_security(char *buff, int size, int fd)
 		//printf("12345789\n");
 		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
 		normalTransaction[MsgType-112](root, cfd);
+		//respond
+		sroot=cJSON_CreateObject();
+		cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+10);
+		cJSON_AddNumberToObject(sroot,"Sn",				10);
+		sout=cJSON_Print(sroot);
+		if(send(cfd,sout,strlen(sout),0)<=0)
+		{
+			//send error handle
+			for(i=0;i<MAX_CLIENT_NUM;i++)
+			{
+				if(connect_host[i] == cfd)
+				{
+					connect_host[i] = -1;
+					client_num --;
+					break;
+				}
+			}
+			close(cfd);
+			printf("sock%d send error ,may be disconneted\n",cfd);
+		}
+		cJSON_Delete(sroot);
+		free(sout);
 	}
     cJSON_Delete(root);
     return 0;
@@ -528,6 +574,96 @@ void parse_json_node(char *text,uint8 textlen)
    }
 #endif
 
+//int  parse_json_node(char *text,uint8 textlen)
+//{
+//
+//	cJSON *root ;
+//	int msgtype;
+//    char *Time=NULL ;
+//    char *IEEE=NULL;
+//    char *Nwkaddr=NULL;
+//    char *EP=NULL;
+//    char *data =NULL;
+//	uint8 databuf_len;
+//	char *Rx_msgbuff=NULL;
+//	char *heart_beat=NULL;
+//	//uint8 heart_buff[20]={"0200070007"};
+//    int i=0,len=0,ret=0;
+//	char *databuf=NULL;
+//
+//    Rx_msgbuff=text;
+//    printf("node_Rx_msgbuff=%s\n",Rx_msgbuff);
+//    root=cJSON_Parse(Rx_msgbuff);
+//	if (!root)
+//    {
+//		printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
+//	 //ret = JSON_PARSE_FAILED;
+//	 	return JSON_PARSE_FAILED; //modify yanly141230
+//    }
+//	{
+//		msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+//		printf("node_msgtype=%d\n",msgtype);
+//		switch(msgtype)
+//        {
+//			case TERM_MSGTYPE:
+////				Time =cJSON_GetObjectItem(root, "Time")->valuestring;
+////				printf("Time=%s\n",Time);
+////				EP=cJSON_GetObjectItem(root, "EP")->valuestring;
+////				printf("EP=%s\n",EP);
+//
+//				IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring;
+//				printf("IEEE=%s\n",IEEE);
+//
+//				Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
+//				printf("Nwkaddr=%s\n",Nwkaddr);
+//
+//				data=cJSON_GetObjectItem(root, "data")->valuestring;
+//				printf("data=%s\n",data);
+//
+//				if(IEEE)
+//				{
+//					if(data)
+//					{
+////						sprintf(get_systime,"%s",Time);
+////						printf("get_systime=%s\n",get_systime);
+//
+//						len=strlen(data)/2;
+//						databuf=(char *)malloc(sizeof(char)*len);
+//						printf("databuf= ");
+//						for(i=0;i<len;i++)
+//						{
+//							sscanf(data+i*2,"%02X",databuf+i);
+//							printf("%0X ",databuf[i]);
+//						}
+//
+//						databuf_len=len;
+//						printf("databuf_len=%d \n",databuf_len);
+//						unpack_term_msg((uint8*)databuf,databuf_len);
+//					}
+//					else
+//					{
+//					  printf("from node no data\n" );
+//					}
+//
+//				}
+//				else
+//				{
+//					printf("node return error\n" );
+//				}
+//				break;
+//
+//			case HEART_MSGTYPE:
+//				return 0;
+////        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
+////
+////        	  printf("node heart_ack=%s\n",heart_beat);
+//				break;
+//			default: break;
+//        }
+//	}
+//		cJSON_Delete(root);
+//		return databuf_len;
+//}
 void parse_json_node(char *text,uint8 textlen)
 {
 
@@ -617,7 +753,120 @@ void parse_json_node(char *text,uint8 textlen)
 		return;
 
    }
+/****************************************************************************************/
+//
+int parse_json_node_security(char *text,int textlen)
+{
 
+	cJSON *root ;
+	cJSON *sroot;
+	char *sout;
+
+	int msgtype;
+    char *IEEE=NULL;
+    char *Nwkaddr=NULL;
+    char *data =NULL;
+	uint8 databuf_len;
+	char switchnum,switchstatus,sensornum,sensorstatus;
+	char *databuf=NULL;
+	int s_len;
+	int i;
+
+    root=cJSON_Parse(text);
+	if (!root)
+    {
+	 	return JSON_PARSE_FAILED;
+    }
+	{
+		msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+		printf("node_msgtype=%d\n",msgtype);
+		switch(msgtype)
+        {
+			case TERM_MSGTYPE:
+				IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring;
+				printf("IEEE=%s\n",IEEE);
+
+				Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
+				printf("Nwkaddr=%s\n",Nwkaddr);
+
+				data=cJSON_GetObjectItem(root, "data")->valuestring;
+				printf("data=%s\n",data);
+
+				databuf_len=strlen(data)/2;
+				databuf=(uint8 *)malloc(sizeof(uint8)*databuf_len);
+				printf("databuf= ");
+				for(i=0;i<databuf_len;i++)
+				{
+					sscanf(data+i*2,"%02X",databuf+i);
+					printf("%0X ",databuf[i]);
+				}
+				printf("databuf_len=%d \n",databuf_len);
+
+				//handle msg:
+				switch (databuf[1])
+				{
+					case 0x00://传感器上传的
+//						printf("upload :node sensor upload\n");
+//						sensornum = databuf[databuf_len-2];
+//						sensorstatus = databuf[databuf_len-1];
+//						sroot=cJSON_CreateObject();
+//						cJSON_AddNumberToObject(sroot,"MsgType",				118);
+//						cJSON_AddNumberToObject(sroot,"Sn",						10);
+//						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+//						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+//						cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
+//						cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
+//						sout = cJSON_Print(sroot);
+//						cJSON_Delete(sroot);
+//						printf("%s\n",sout);
+//						s_len = strlen(sout);
+//						//发送给所有在线客户端
+//						send_msg_to_all_client(sout, s_len);
+//						//发送给云代理服务器  141230
+//						//....no do
+//						//响应给节点
+//						upload_sensor_change_respond(Nwkaddr, databuf, databuf_len);
+//						free(sout);
+//						free(databuf);
+						break;
+					case 0x02://控制智能插座的响应
+						printf("respond :ctrl switch\n");
+						switchnum = databuf[databuf_len-2];
+						switchstatus = databuf[databuf_len-1];
+						sroot=cJSON_CreateObject();
+						cJSON_AddNumberToObject(sroot,"MsgType",				117);
+						cJSON_AddNumberToObject(sroot,"Sn",						10);
+						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+						cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
+						cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
+						sout = cJSON_Print(sroot);
+						cJSON_Delete(sroot);
+						printf("%s\n",sout);
+						s_len = strlen(sout);
+						//发送给所有在线客户端
+						send_msg_to_all_client(sout, s_len);
+						//发送给云代理服务器  141230
+						//....no do
+						free(sout);
+						free(databuf);
+						break;
+					default:break;
+				}
+				break;
+
+			case HEART_MSGTYPE:
+//        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
+//
+//        	  printf("node heart_ack=%s\n",heart_beat);
+				break;
+			default: break;
+        }
+		//release
+		cJSON_Delete(root);
+	}
+	return 1;
+}
 
 void parse_json_server(char *text,uint8 textlen)
 {

@@ -261,7 +261,16 @@ int ConnectClient()
 	int s_s;
 	int optval =1;
 	struct sockaddr_in local;
-	memset(connect_host, -1, MAX_CLIENT_NUM);
+	int i;
+	for(i=0; i<MAX_CLIENT_NUM;i++)
+	{
+		connect_host[i] = -1;
+	}
+//	memset(connect_host, -1, MAX_CLIENT_NUM); //用memset发现有些值没有被置-1；
+	for(i=0; i<MAX_CLIENT_NUM;i++)
+	{
+		printf("connect host:%d\n",connect_host[i]);
+	}
 	//SETUP tcp socket
 	s_s = socket(AF_INET, SOCK_STREAM, 0);
 	if (setsockopt(s_s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1)//允许重复使用本地地址和端口?
@@ -404,16 +413,17 @@ int connect_to_gateway_init(void)
 		printf("node connect fail !\r\n");
 		return -1;
 	}
-	return rc;
+	printf("connected gateway socket success\n");
+	return cfd;
 }
-int nodeSocket()
+int nodeSocket() //modify141230
 {
 	uint8 msg[20] = "0200070007";
 	int cfd;
-	int buffer[1024];
+	char buffer[1024];
 	int recbytes;
 	int s_status;
-	int r_status;
+	char detach_obj;
 	cfd = connect_to_gateway_init();
 	memset(buffer,0,MAXBUF);
 	while(cfd)// connected
@@ -426,45 +436,56 @@ int nodeSocket()
 			if(s_status ==-1)
 			{
 				perror("connected gateway 5002,but send error\n");
+				close(cfd);
 				return -1;
 			}
 			else if(s_status ==0)
 			{
 				printf("connected gateway 5002,but the other side close this socket\n");
+				close(cfd);
 				return -2;
 			}
 			else
 			{}//normal send
 		}
-		recbytes = recv(cfd, buffer, MAXBUF,0);     //���ӳɹ�,�ӷ���˽����ַ�
-		if(recbytes==-1)
+		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);     //���ӳɹ�,�ӷ���˽����ַ�
+		if((recbytes==-1)&&(errno!=EAGAIN))
 		{
-			printf("node read data fail !\r\n");
+			printf("recbytes:%d\n",recbytes);
+			perror("node read data fail");
+			close(cfd);
 			return -1;
 		}
 		else if(recbytes>0)
 		{
-//			printf("node rxbuffer=%s\r\n",buffer);
-//			if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
-//			{
-//				parse_json_node(buffer,recbytes);
-//			}
-//			else
-//			{
-//				printf("receive node data error\n");
-//			}
-//			memset(buffer,0,MAXBUF);
+			printf("gateway socket receive:%s\r=\n",buffer);
+			//detach_obj = detach_parse_json_node(buffer,recbytes);
+			detach_obj = DETACH_BELONG_SECURITY;
+			switch(detach_obj)
+			{
+				case  DETACH_PRASE_ERROR:
+					break;
+				case  DETACH_MSGTYPE_ERROR:
+					break;
+				case  DETACH_BELONG_ENERGY:     /*这个case处理节能的信息*/
+					//parse_json_node(buffer,recbytes);
+					break;
+				case  DETACH_BELONG_SECURITY:	/*这个case处理安防的信息*/
+					parse_json_node_security(buffer,recbytes);
+					break;
+			}
+			memset(buffer,0,MAXBUF);
 		}
 		else if(recbytes==0)
 		{
 			printf("connected gateway 5002,but the other side close this socket\n");
+			close(cfd);
 			return -2;
 		}
 
 	}
 	//close(cfd);
 	return 0;
-
 }
 
 uint8 ServerHeart_sn=0;
@@ -563,31 +584,6 @@ int ServerSocket()
 //int handle_connect(int sockfd)
 void *handle_connect(void *argv)
 {
-//
-//	int s_s = *((int *)argv);
-//	struct sockaddr_in from;
-//	socklen_t len = sizeof(from);
-//	for(;;)
-//	  {
-//		int i = 0;
-//		int s_c;
-//		if((s_c = accept(s_s, (struct sockaddr*)&from, &len))>0)
-//		{
-//			printf("a client connect,from: %s\n",inet_ntoa(from.sin_addr));
-//			//put the client socket to connect_host
-//			for(i=0; i<MAX_CLIENT_NUM; i++)
-//			{
-//				if(connect_host[i] == -1)
-//				{
-//					connect_host[i] = s_c;
-//					client_num ++;
-//
-//				}
-//			}
-//			//break;
-//		  }
-//	   }
-//		return NULL;
 	int s_s = *((int *)argv);
 	struct sockaddr_in from;
 	socklen_t len = sizeof(from);
@@ -676,15 +672,27 @@ void *handle_request(void *argv)
 										memcpy(respondBUff+18,buff, n);
 										send(connect_host[i],respondBUff, n+18, 0);
 										break;
-									case  DETACH_BELONG_ENERGY:
+/*这个case处理节能的客户端信息*/			case  DETACH_BELONG_ENERGY:
 										//parse_json_client(buff, n, connect_host[i]);
 										break;
-									case  DETACH_BELONG_SECURITY:
+/*这个case处理安防的客户端信息*/			case  DETACH_BELONG_SECURITY:
 										client_msg_handle_security(buff, n, connect_host[i]);
 										break;
 								}
 								//send(connect_host[i],buff,strlen(buff),0);
 								memset(buff, 0, MAXBUF);
+							}
+							else if(n==0)
+							{
+								connect_host[i] = -1;
+								client_num --;
+								close(connect_host[i]);
+							}
+							else if(n==-1)
+							{
+								connect_host[i] = -1;
+								client_num--;
+								close(connect_host[i]);
 							}
 						}
 					}
@@ -692,16 +700,14 @@ void *handle_request(void *argv)
 			break;
 		}
 	}
-
-
 	//free
 	for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+	{
+		if(connect_host[i]!=-1)
 		{
-			if(connect_host[i]!=-1)
-			{
-				close(connect_host[i]);
-			}
+			close(connect_host[i]);
 		}
+	}
 	return NULL;
 	//return 0;
 }
@@ -781,6 +787,29 @@ void sig_process(int signo)
 void sig_pipe(int signo)
 {
 	_exit(0);
+}
+//发送给所有在线客户端   //add yanly141230
+void send_msg_to_all_client(char *text, int text_size)
+{
+	int i;
+	for(i=0; i<MAX_CLIENT_NUM; i++)
+	{
+		if(client_num<0)
+		{
+			printf("send msg to all client error: no client is connected!\n");
+			break;
+		}
+		if(connect_host[i] != -1)
+		{
+			if(send(connect_host[i], text, text_size, 0)<=0)
+			{
+				connect_host[i] =-1;
+				client_num--;
+				close(connect_host[i]);
+			}
+			printf("send msg to all client:this is socket %d \n",connect_host[i]);
+		}
+	}
 }
 
 

@@ -253,7 +253,7 @@ void term_msg_process();
 //extern int prtfBuf(U8_T mod,U8_T *dataBuf, int length,char* info);
 
 /********************************************************************/
-extern void send_data_to_dev_security(char *nwkaddr, char num, char state);
+extern void send_data_to_dev_security(char *nwkaddr, char *text, int text_len);
 
 #endif/*End of _SHELL_H*/
 

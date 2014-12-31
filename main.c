@@ -58,7 +58,7 @@ int main()
 //    pthread_create(&client_type,NULL,client_type_thread,NULL);   //���ͻ�������
 //
 //
-//	pthread_create(&time_thread,NULL,time_t_thread,NULL);          //��ʱ���߳�
+	pthread_create(&time_thread,NULL,time_t_thread,NULL);          //��ʱ���߳�
 //
 //
 //	pthread_create(&term_thread,NULL,term_msg_thread,NULL);       //���ͳ�����Ϣ�߳�

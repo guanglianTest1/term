@@ -159,6 +159,12 @@ typedef struct {
 		}node_list;
 #endif
 
+
+/*****************************************************************/
+//add yanly141230
+extern int connect_host[MAX_CLIENT_NUM];
+
+
 //void ConnectClient();
 extern int ConnectClient();
 //extern void *client_msg_thread(void *p);
@@ -173,4 +179,6 @@ extern int ServerSocket();
 
 extern void *handle_connect(void *argv);
 extern void *handle_request(void *argv);
+extern void send_msg_to_all_client(char *text, int text_size);
+
 #endif

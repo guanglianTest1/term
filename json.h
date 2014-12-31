@@ -39,10 +39,11 @@
 uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket);
 //void parse_json_client(client_status client_list);
 void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket);
-void parse_json_node(char *text,uint8 textlen) ;
+void parse_json_node(char *text,uint8 textlen);
 void package_json_server(msgform *msg_Rxque ,uint8 Rx_msgnum,uint16 socketflg);
 void parse_json_server(char *text,uint8 textlen);
 
+extern int parse_json_node_security(char *text,int textlen);
 extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
 
 #endif
