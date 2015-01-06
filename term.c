@@ -260,7 +260,9 @@ uint8 SendDataToDev(uint8 *termid,uint8 *nodeid)
 }/*End of SendDataToDev*/
 void send_data_to_dev_security(char *nwkaddr, char *text, int text_len)
 {
-	child_doit(text,text_len,nwkaddr);
+	uint8 *buff = (uint8 *)text;
+	uint8 *id = (uint8 *)nwkaddr;
+	child_doit(buff,text_len,id);
 }
 
 

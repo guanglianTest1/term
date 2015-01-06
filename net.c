@@ -459,20 +459,17 @@ int nodeSocket() //modify141230
 		else if(recbytes>0)
 		{
 			printf("gateway socket receive:%s\r=\n",buffer);
-			//detach_obj = detach_parse_json_node(buffer,recbytes);
+			//detach_obj = detach_5002_message22(buffer,recbytes);
 			detach_obj = DETACH_BELONG_SECURITY;
 			switch(detach_obj)
 			{
-				case  DETACH_PRASE_ERROR:
-					break;
-				case  DETACH_MSGTYPE_ERROR:
-					break;
 				case  DETACH_BELONG_ENERGY:     /*这个case处理节能的信息*/
 					//parse_json_node(buffer,recbytes);
 					break;
 				case  DETACH_BELONG_SECURITY:	/*这个case处理安防的信息*/
 					parse_json_node_security(buffer,recbytes);
 					break;
+				default : break;
 			}
 			memset(buffer,0,MAXBUF);
 		}
@@ -811,6 +808,25 @@ void send_msg_to_all_client(char *text, int text_size)
 		}
 	}
 }
-
+//发送给one客户端
+void send_msg_to_client(char *text, int text_size, int fd)
+{
+	int i;
+	if(send(fd,text,text_size,0)<=0)
+	{
+		//send error handle
+		for(i=0;i<MAX_CLIENT_NUM;i++)
+		{
+			if(connect_host[i] == fd)
+			{
+				connect_host[i] = -1;
+				client_num --;
+				break;
+			}
+		}
+		close(fd);
+		printf("sock%d send error ,may be disconneted\n",fd);
+	}
+}
 
 

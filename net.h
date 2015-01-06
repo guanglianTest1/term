@@ -180,5 +180,6 @@ extern int ServerSocket();
 extern void *handle_connect(void *argv);
 extern void *handle_request(void *argv);
 extern void send_msg_to_all_client(char *text, int text_size);
+extern void send_msg_to_client(char *text, int text_size, int fd);
 
 #endif

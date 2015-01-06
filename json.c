@@ -17,6 +17,7 @@
 #include<arpa/inet.h>
 #include<netdb.h>
 #include"pthread.h"
+#include <sqlite3.h>  //add yan150104
 
 
 #include"net.h"
@@ -26,7 +27,7 @@
 #include"HttpModule.h"
 #include"term.h"
 #include"sysinit.h"
-
+#include "appSqlite.h" //add yanly150105
 
 //#include"public.h"
 extern uint16 client_num;
@@ -69,8 +70,191 @@ const functionP_t normalTransaction[]=
 	msghandle_switch_state_check,
 	msghandle_switch_state_ctrl
 };
-static void msghandle_security_config(cJSON *root, int fd){}
-static void msghandle_security_config_check(cJSON *root, int fd){}
+static void msghandle_security_config(cJSON *root, int fd)
+{
+	cJSON *_root = root;
+	cJSON *NodeList_array, *NodeList_item;	int node_cnt;
+	cJSON *SubNode_array, *SubNode_item;	int subnode_cnt;
+	char *SecurityNodeID;
+	char *Nwkaddr;
+	char opt;
+	int i,j;
+	//////
+	subsecurityConfig_t *subnod;
+	printf("msghandle_security_config\n");
+	opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
+	NodeList_array = cJSON_GetObjectItem (_root, "NodeList");
+	if(NodeList_array)
+	{
+		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
+		for(i=0;i<node_cnt;i++)
+		{
+			NodeList_item = cJSON_GetArrayItem(NodeList_array,i);
+		    if(NodeList_item)
+		    {
+		    	SecurityNodeID = cJSON_GetObjectItem(NodeList_item,"SecurityNodeID")->valuestring;
+		    	Nwkaddr = cJSON_GetObjectItem(NodeList_item,"Nwkaddr")->valuestring;
+		    	printf("ieee:%s,addr:%s\n",SecurityNodeID,Nwkaddr);
+		    	SubNode_array = cJSON_GetObjectItem (NodeList_item, "SubNode");
+		    	subnode_cnt = cJSON_GetArraySize (SubNode_array ); //获取数组的大小
+		    	subnod = (subsecurityConfig_t *)malloc(subnode_cnt*sizeof(subsecurityConfig_t));//malloc //
+		    	if(subnod ==NULL)
+		    	{
+		    		printf("malloc fail!\n");
+		    		return;
+		    	}
+		    	for(j=0;j<subnode_cnt;j++)
+		    	{
+		    		SubNode_item = cJSON_GetArrayItem(SubNode_array,j);
+		    		if(SubNode_item)
+		    		{
+		    			subnod[j].type = cJSON_GetObjectItem(SubNode_item, "Type")->valueint;
+		    			subnod[j].subtype = cJSON_GetObjectItem(SubNode_item, "SubType")->valueint;
+		    			subnod[j].num = cJSON_GetObjectItem(SubNode_item, "Num")->valueint;
+		    			subnod[j].info = cJSON_GetObjectItem(SubNode_item,"Info")->valuestring;
+		    			subnod[j].operator = cJSON_GetObjectItem(SubNode_item, "OperatorType")->valueint;
+		    			printf("type:%d,subtype:%d,num:%d,info:%s,operator:%d\n",subnod[j].type,
+		    					subnod[j].subtype,subnod[j].num,subnod[j].info,subnod[j].operator);
+		    		}
+		    	}
+		    	//handle sqlite3
+		    	sqlite_insert_security_config_table(SecurityNodeID, Nwkaddr, subnod, subnode_cnt);
+		    	sqlite_updata_global_operator(opt);
+		    	//freee
+		    	free(subnod);
+		    }
+		}
+	}
+}
+#if 0
+static void msghandle_security_config_check(cJSON *root, int fd)
+{
+	char **q_data=NULL;
+	int q_row,q_col;int i;
+	int index;
+
+	cJSON *sroot;
+	cJSON *NodeList_array, *NodeList_item;
+    int opt;
+
+    char *out=NULL;
+//check database:
+    q_data = sqlite_query_security_config(q_data, &q_row, &q_col);
+//	if(q_data = (sqlite_query_security_config(q_data, &q_row, &q_col))<0)
+//	{
+//		return;
+//	}
+	//printf("data:%s,row:%d,col:%d",q_data,q_row,q_col);
+
+	sroot = cJSON_CreateObject();
+
+	cJSON_AddNumberToObject(sroot, "MsgType", 129);
+	cJSON_AddNumberToObject(sroot, "Sn", 10);
+	opt = sqlite_query_global_operator();
+	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt);
+	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item =cJSON_CreateArray());
+	index = q_col;
+//    for(j=0;j<q_col;j++)
+//    {
+//        printf(" %s",q_data[index++]);
+//
+//    }
+	for(i=0;i<q_row;i++)
+	{
+		cJSON_AddItemToArray(NodeList_item, NodeList_array=cJSON_CreateObject());
+		cJSON_AddStringToObject(NodeList_array, "SecurityNodeID", q_data[index++]);
+		cJSON_AddStringToObject(NodeList_array, "Nwkaddr", q_data[index++]);
+		cJSON_AddNumberToObject(NodeList_array, "Type", atoi(q_data[index++]));
+		cJSON_AddNumberToObject(NodeList_array, "SubType", atoi(q_data[index++]));
+		cJSON_AddNumberToObject(NodeList_array, "Num", atoi(q_data[index++]));
+		cJSON_AddStringToObject(NodeList_array, "Info", q_data[index++]);
+		cJSON_AddNumberToObject(NodeList_array, "OperatorType", atoi(q_data[index++]));
+	}
+	out = cJSON_PrintUnformatted(sroot);
+	//printf("out=%s\n",out);
+//send msg to client:
+	send_msg_to_client(out, strlen(out), fd);
+//free:
+	cJSON_Delete(sroot);
+	free(out);
+	sqlite_free_query_result(q_data);
+}
+#else
+static void msghandle_security_config_check(cJSON *root, int fd)
+{
+	char **q_data=NULL;
+	char **ieee=NULL;int ieee_row,ieee_col;
+	int q_row,q_col;int i,j;
+	int index_ieee,index_q;
+	char *sql_req_config = "select ieee,nwkaddr,type,subtype,num,info,operator from stable where nwkaddr not null";
+	char *sql_req_ieee = "SELECT  DISTINCT ieee,nwkaddr FROM stable where nwkaddr not null";
+
+	cJSON *sroot;
+	cJSON *NodeList_array, *NodeList_item;
+	cJSON *SubNodeItem, *SubNodeArray;
+    int opt ;
+    char *out=NULL;
+
+//query database:
+    q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
+    if(q_data ==NULL)
+    {
+    	sqlite_free_query_result(q_data);
+    	return;
+    }
+    ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
+    if(ieee == NULL)
+    {
+    	sqlite_free_query_result(ieee);
+    	return;
+    }
+    opt = sqlite_query_global_operator();
+    if(opt ==-1)
+    {
+    	return;
+    }
+//organize json package
+    sroot = cJSON_CreateObject();
+	cJSON_AddNumberToObject(sroot, "MsgType", 129);
+	cJSON_AddNumberToObject(sroot, "Sn", 10);
+	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt);
+	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item =cJSON_CreateArray());
+	for(i=0;i<ieee_row;i++)
+	{
+		index_ieee = i*ieee_col+ieee_col;//ieee data的每行头
+		cJSON_AddItemToArray(NodeList_item, NodeList_array=cJSON_CreateObject());
+		cJSON_AddStringToObject(NodeList_array, "SecurityNodeID", ieee[index_ieee]);
+		cJSON_AddStringToObject(NodeList_array, "Nwkaddr", ieee[index_ieee+1]);
+		cJSON_AddItemToObject(NodeList_array, "SubNode", SubNodeItem =cJSON_CreateArray());
+		for(j=0;j<q_row;j++)
+		{
+			index_q = j*q_col + q_col;//data的每行头
+			if(strcmp(q_data[index_q], ieee[index_ieee])==0)
+			{
+				cJSON_AddItemToArray(SubNodeItem, SubNodeArray=cJSON_CreateObject());
+				cJSON_AddNumberToObject(SubNodeArray, "Type", atoi(q_data[index_q+2]));
+				cJSON_AddNumberToObject(SubNodeArray, "SubType", atoi(q_data[index_q+3]));
+				cJSON_AddNumberToObject(SubNodeArray, "Num", atoi(q_data[index_q+4]));
+				cJSON_AddStringToObject(SubNodeArray, "Info", q_data[index_q+5]);
+				cJSON_AddNumberToObject(SubNodeArray, "OperatorType", atoi(q_data[index_q+6]));
+			}
+			else
+			{}
+		}
+	}
+//
+	out = cJSON_PrintUnformatted(sroot);
+	//printf("out=%s\n",out);
+//send msg to client:
+	send_msg_to_client(out, strlen(out), fd);
+//free:
+	cJSON_Delete(sroot);
+	free(out);
+	sqlite_free_query_result(q_data);
+	sqlite_free_query_result(ieee);
+	return;
+}
+#endif
 static void msghandle_sensor_state_check(cJSON *root, int fd){}
 static void msghandle_switch_state_check(cJSON *root, int fd){}
 static void msghandle_switch_state_ctrl(cJSON *root, int fd)
@@ -302,7 +486,12 @@ int detach_interface_msg_client(char *text,int textlen)
 	msgtype = cJSON_GetObjectItem(root, "MsgType")->valueint;
 	if((msgtype>= 0x10)&&(msgtype<0x70))
 	{
-		status = DETACH_BELONG_ENERGY;
+		if(msgtype ==0x10)    //this is debug add yan141231
+		{
+			status = DETACH_BELONG_SECURITY;
+		}
+		else
+			status = DETACH_BELONG_ENERGY;
 	}
 	else if((msgtype>= 0x70)&&(msgtype<0x80))
 	{
@@ -332,31 +521,22 @@ int client_msg_handle_security(char *buff, int size, int fd)
 	root=cJSON_Parse(buff);
 	if(root)
 	{
-		//printf("12345789\n");
 		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
-		normalTransaction[MsgType-112](root, cfd);
-		//respond
-		sroot=cJSON_CreateObject();
-		cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+10);
-		cJSON_AddNumberToObject(sroot,"Sn",				10);
-		sout=cJSON_Print(sroot);
-		if(send(cfd,sout,strlen(sout),0)<=0)
+		if(MsgType != 0x10)   //this is debug add yanly141231
 		{
-			//send error handle
-			for(i=0;i<MAX_CLIENT_NUM;i++)
-			{
-				if(connect_host[i] == cfd)
-				{
-					connect_host[i] = -1;
-					client_num --;
-					break;
-				}
-			}
-			close(cfd);
-			printf("sock%d send error ,may be disconneted\n",cfd);
+			normalTransaction[MsgType-112](root, cfd);
 		}
-		cJSON_Delete(sroot);
-		free(sout);
+		//respond: when normal set,not request
+		if((MsgType == 0x70)||(MsgType == 0x74))
+		{
+			sroot=cJSON_CreateObject();
+			cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
+			cJSON_AddNumberToObject(sroot,"Sn",				10);
+			sout=cJSON_Print(sroot);
+			send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
+			cJSON_Delete(sroot);
+			free(sout);
+		}
 	}
     cJSON_Delete(root);
     return 0;
@@ -756,6 +936,42 @@ void parse_json_node(char *text,uint8 textlen)
    }
 /****************************************************************************************/
 //
+//int detach_5002_message22(char *text, int textlen)
+//{
+//	cJSON *root;
+//	int msgtype;
+//    char *ieee;
+//    char *addr;
+//	int ret;
+//
+//	char **data;
+//	int col,row;
+//	char *sql;
+//
+//    root=cJSON_Parse(text);
+//	if (!root)
+//    {
+//	 	return DETACH_PRASE_ERROR;
+//    }
+//	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+//	if(msgtype == TERM_MSGTYPE)
+//	{
+//		cJSON_Delete(root);
+//		return DETACH_MSGTYPE_ERROR;
+//	}
+//	ieee =cJSON_GetObjectItem(root, "IEEE")->valuestring;
+//	sprintf(sql,"SELECT ieee FROM stable where ieee =%s",ieee);
+//	if(sqlite_query_msg(data, &row, &col, sql)!=1)
+//	{
+//		sqlite_free_query_result(data);
+//		return DETACH_IEEE_ERROR;
+//	}
+//
+//	return ret;
+//
+//
+//
+//}
 int parse_json_node_security(char *text,int textlen)
 {
 
@@ -861,7 +1077,6 @@ int parse_json_node_security(char *text,int textlen)
 
 			case HEART_MSGTYPE:
 //        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
-//
 //        	  printf("node heart_ack=%s\n",heart_beat);
 				break;
 			default: break;

@@ -20,25 +20,26 @@
 // static pthread_t client_thread;
  static pthread_t client_type;
 pthread_t thread_do[2];
-pthread_t threadtest;
+//pthread_t threadtest;
 
 extern uint8 listen_thread_isover;
 
-void *thread_test(void *argv)
-{
-	printf("haha\n");
-	return NULL;
-}
+//void *thread_test(void *argv)
+//{
+//	printf("haha\n");
+//	return NULL;
+//}
 int main()
 {
 	int i;
 	int s_s;
 
+	db_init();
 	sysInit();
 	
 	s_s= ConnectClient();
 
-	pthread_create(&threadtest,NULL,thread_test,NULL);
+//	pthread_create(&threadtest,NULL,thread_test,NULL);
 
 	pthread_create(&thread_do[0], NULL, handle_connect, (void*)&s_s);
 	pthread_create(&thread_do[1], NULL, handle_request, NULL);

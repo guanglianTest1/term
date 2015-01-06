@@ -31,10 +31,10 @@
 /*client detach interface ***********************************************************///add yanly141229
 #define	DETACH_PRASE_ERROR					-1
 #define DETACH_MSGTYPE_ERROR				-2
+#define DETACH_IEEE_ERROR					-3
 #define	DETACH_BELONG_ENERGY				0
 #define	DETACH_BELONG_SECURITY				1
-
-
+/************************************************************************************/
 
 uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket);
 //void parse_json_client(client_status client_list);
