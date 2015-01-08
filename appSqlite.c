@@ -1,6 +1,6 @@
 /*
  * appSqlite.c
- *
+ *数据库处理
  *  Created on: Jan 5, 2015
  *      Author: yanly
  */
@@ -10,22 +10,22 @@
 #include <stdlib.h>
 #include "appSqlite.h"
 
-#define		DATABASE_PATH		"/mnt/nfs/node.db"
+#define		DATABASE_PATH		"/mnt/nfs/node.db"  //数据库存放路径
 #define     GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
 
 sqlite3* node_db = NULL;
 
 
-int check_ieee_config(void *params,int n_column,char **column_value,char **column_name)
-{
-    int i;
-    printf("column=%d\n",n_column);
-    for(i=0;i<n_column;i++){
-        printf("\t%s",column_value[i]);
-    }
-    printf("\n");
-    return 0;
-}
+//int check_ieee_config(void *params,int n_column,char **column_value,char **column_name)
+//{
+//    int i;
+//    //printf("column=%d\n",n_column);
+//    for(i=0;i<n_column;i++){
+//        //printf("\t%s",column_value[i]);
+//    }
+//    //printf("\n");
+//    return 0;
+//}
 void sqlite_insert_security_config_table(char *ieee, char *addr, subsecurityConfig_t *data, int icnt)
 {
 	int i;
@@ -74,6 +74,17 @@ void sqlite_updata_global_operator(char op)
 	}
 	sqlite3_free(errmsg);
 }
+void sqlite_updata_msg(char *sql)
+{
+	int ret;
+	char *errmsg;
+	ret = sqlite3_exec(node_db,sql,NULL,NULL,&errmsg);
+	if(ret != SQLITE_OK)
+	{
+		printf("updata database fail:%s\n",errmsg);
+	}
+	sqlite3_free(errmsg);
+}
 int db_init()
 {
     if (SQLITE_OK != sqlite3_open(DATABASE_PATH, &node_db)){//打开数据库
@@ -81,7 +92,8 @@ int db_init()
         sqlite3_close(node_db);
         return -1;
     }
-    printf("open db \n");
+    else
+    	printf("open node.db \n");
     return 0;
 }
 char** sqlite_query_msg(int *row, int *col, char *sql)
@@ -89,23 +101,23 @@ char** sqlite_query_msg(int *row, int *col, char *sql)
 	int ret;
 	char *errmsg;
 	char **dbresult;
-	//int j,i;
+	int j,i;
 	int nrow,ncol,index;
     ret = sqlite3_get_table(node_db,sql,&dbresult,row,col,&errmsg);
     if(ret == SQLITE_OK)
     {
     	nrow = *row;ncol = *col;
-        printf("query %i records.\n",nrow);
+        //printf("query %i records.\n",nrow);
         index=ncol;
-#if 0
+#if 1
         for(i=0;i<nrow;i++)
         {
             for(j=0;j<ncol;j++)
             {
-                printf("%s",dbresult[index]);
+                //printf("%s",dbresult[index]);
                 index++;
             }
-            printf("\n");
+            //printf("\n");
         }
 #endif
     }
@@ -163,16 +175,16 @@ int sqlite_query_global_operator()
     ret = sqlite3_get_table(node_db,"select operator from stable where ieee = 'global operator'",&data,&nrow,&ncol,&errmsg);
     if(ret == SQLITE_OK)
     {
-        printf("query %i records.\n",nrow);
+        //printf("query %i records.\n",nrow);
         index=ncol;
         for(i=0;i<nrow;i++)
         {
             for(j=0;j<ncol;j++)
             {
-                printf("%s",data[index]);
+                //printf("%s",data[index]);
                 index++;
             }
-            printf("\n");
+            //printf("\n");
         }
     }
     else
@@ -185,7 +197,7 @@ int sqlite_query_global_operator()
     	return -1;
     }
     opt = atoi(data[ncol]);
-    printf("opt=%d\n",opt);
+    //printf("opt=%d\n",opt);
     sqlite3_free_table(data);
     return opt;
 }

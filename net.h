@@ -64,16 +64,7 @@ uint16 client_buff_len;
 //
 //};
 
-
-
-
-
-
-
-
-
-
-
+/***********************************************************************/  //energy
 #define  HeartMsg             0x10     //心跳消息
 #define  HeartAckMsg          0x20     //心跳响应消息
 
@@ -98,6 +89,33 @@ uint16 client_buff_len;
 
 #define  HeartReportMsg       0x40    //表数据上报消息
 #define  HeartReportAckMsg    0x50    //表数据上报响应消息
+
+
+/***********************************************************************/  //security yanly
+#define	SECURITY_CONFIG_MSG							0x70
+#define	SECURITY_CONFIG_CHECK_MSG					0x71
+#define	SECURITY_SENSOR_CHECK_MSG					0x72
+#define	SECURITY_SWITCH_CHECK_MSG					0x73
+#define	SECURITY_SWITCH_CONTROL_MSG					0x74
+#define	SECURITY_SWITCH_UPLOAD_MSG					0x75
+#define	SECURITY_SENSOR_UPLOAD_MSG					0x76
+#define	SECURITY_SET_GLOBAL_OPERATOR_MSG			0x77
+#define	SECURITY_SET_DEV_OPERATOR_MSG				0x78
+#define	SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG			0x79
+#define	SECURITY_UPLOAD_DEV_OPERATOR_MSG			0x7a
+
+
+#define	SECURITY_CONFIG_MSG_RES				    	(SECURITY_CONFIG_MSG + 0x10)
+#define	SECURITY_CONFIG_CHECK_MSG_RES				(SECURITY_CONFIG_CHECK_MSG + 0x10)
+#define	SECURITY_SENSOR_CHECK_MSG_RES				(SECURITY_SENSOR_CHECK_MSG + 0x10)
+#define	SECURITY_SWITCH_CHECK_MSG_RES				(SECURITY_SWITCH_CHECK_MSG + 0x10)
+#define	SECURITY_SWITCH_CONTROL_MSG_RES				(SECURITY_SWITCH_CONTROL_MSG + 0x10)
+#define	SECURITY_SWITCH_UPLOAD_MSG_RES				(SECURITY_SWITCH_UPLOAD_MSG + 0x10)
+#define	SECURITY_SENSOR_UPLOAD_MSG_RES				(SECURITY_SENSOR_UPLOAD_MSG + 0x10)
+#define	SECURITY_SET_GLOBAL_OPERATOR_MSG_RES		(SECURITY_SET_GLOBAL_OPERATOR_MSG + 0x10)
+#define	SECURITY_SET_DEV_OPERATOR_MSG_RES			(SECURITY_SET_DEV_OPERATOR_MSG + 0x10)
+#define	SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG_RES		(SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG + 0x10)
+#define	SECURITY_UPLOAD_DEV_OPERATOR_MSG_RES		(SECURITY_UPLOAD_DEV_OPERATOR_MSG + 0x10)
 
 
 

@@ -7,6 +7,11 @@
 
 #ifndef APPSQLITE_H_
 #define APPSQLITE_H_
+/**********************************************************/  //serity table: database column field define
+#define		SECURITY_SENSOR_TYPE			1
+#define		SECURITY_SWITCH_TYPE			2
+
+
 
 typedef struct
 {
@@ -33,4 +38,5 @@ extern char** sqlite_query_msg(int *row, int *col, char *sql);
 extern int sqlite_query_global_operator();
 extern void sqlite_free_query_result(char **data);
 extern char** sqlite_query_ieee(char **data, int *row, int *col);
+extern void sqlite_updata_msg(char *sql);
 #endif /* APPSQLITE_H_ */

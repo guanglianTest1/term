@@ -267,10 +267,10 @@ int ConnectClient()
 		connect_host[i] = -1;
 	}
 //	memset(connect_host, -1, MAX_CLIENT_NUM); //用memset发现有些值没有被置-1；
-	for(i=0; i<MAX_CLIENT_NUM;i++)
-	{
-		printf("connect host:%d\n",connect_host[i]);
-	}
+//	for(i=0; i<MAX_CLIENT_NUM;i++)
+//	{
+//		printf("connect host:%d\n",connect_host[i]);
+//	}
 	//SETUP tcp socket
 	s_s = socket(AF_INET, SOCK_STREAM, 0);
 	if (setsockopt(s_s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1)//允许重复使用本地地址和端口?
@@ -423,7 +423,7 @@ int nodeSocket() //modify141230
 	char buffer[1024];
 	int recbytes;
 	int s_status;
-	char detach_obj;
+	int detach_obj;
 	cfd = connect_to_gateway_init();
 	memset(buffer,0,MAXBUF);
 	while(cfd)// connected
@@ -431,7 +431,7 @@ int nodeSocket() //modify141230
 		if(node_heart_flag == enable)
 		{
 			node_heart_flag=disable;
-			printf("send node heart beat\n");
+			//printf("send node heart beat\n");
 			s_status = send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
 			if(s_status ==-1)
 			{
@@ -451,25 +451,29 @@ int nodeSocket() //modify141230
 		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);     //���ӳɹ�,�ӷ���˽����ַ�
 		if((recbytes==-1)&&(errno!=EAGAIN))
 		{
-			printf("recbytes:%d\n",recbytes);
+			//printf("recbytes:%d\n",recbytes);
 			perror("node read data fail");
 			close(cfd);
 			return -1;
 		}
 		else if(recbytes>0)
 		{
-			printf("gateway socket receive:%s\r=\n",buffer);
-			//detach_obj = detach_5002_message22(buffer,recbytes);
-			detach_obj = DETACH_BELONG_SECURITY;
+			//printf("gateway socket receive:%s\r=\n",buffer);
+			detach_obj = detach_5002_message22(buffer,recbytes);
+			//printf("5002message22:%d\n",detach_obj);
+			//detach_obj = DETACH_BELONG_SECURITY;
 			switch(detach_obj)
 			{
 				case  DETACH_BELONG_ENERGY:     /*这个case处理节能的信息*/
+					printf("energy>>");
 					//parse_json_node(buffer,recbytes);
 					break;
 				case  DETACH_BELONG_SECURITY:	/*这个case处理安防的信息*/
+					printf("security>>");
 					parse_json_node_security(buffer,recbytes);
 					break;
-				default : break;
+				default :
+					break;
 			}
 			memset(buffer,0,MAXBUF);
 		}
@@ -650,9 +654,9 @@ void *handle_request(void *argv)
 							n = recv(connect_host[i], buff, MAXBUF, 0);
 							if(n>0)
 							{
-								printf("something recv ,size: %d, connect file:%d \n",n,connect_host[i]);
+								//printf("something recv ,size: %d, connect file:%d \n",n,connect_host[i]);
 								//printf("buff[0]=%d,buff[n-1]=%d \n",buff[0],buff[n-1]);
-								printf("sever recieve data:%s \n", buff);
+								//printf("sever recieve data:%s \n", buff);
 //									memcpy(client_list[i].client_buff,buff,n);
 //								    printf("**client_buff=%s ****\r\n",client_list[i].client_buff);
 //									client_list[i].client_buff_len=n;
@@ -663,18 +667,25 @@ void *handle_request(void *argv)
 										memcpy(respondBUff,"data format error:", 18);
 										memcpy(respondBUff+18,buff, n);
 										send(connect_host[i],respondBUff, n+18, 0);
+										printf("received client message,but prase json error\n");
 										break;
 									case  DETACH_MSGTYPE_ERROR:
 										memcpy(respondBUff,"data format error:", 18);
 										memcpy(respondBUff+18,buff, n);
 										send(connect_host[i],respondBUff, n+18, 0);
+										printf("received client message,but msgtype error \n");
 										break;
 /*这个case处理节能的客户端信息*/			case  DETACH_BELONG_ENERGY:
 										//parse_json_client(buff, n, connect_host[i]);
 										break;
 /*这个case处理安防的客户端信息*/			case  DETACH_BELONG_SECURITY:
+										printf("received client message >>for security >>");
 										client_msg_handle_security(buff, n, connect_host[i]);
 										break;
+									case DETACH_BELONG_IN_COMMON:
+										client_msg_handle_in_common(buff, n, connect_host[i]);
+										break;
+									default:break;
 								}
 								//send(connect_host[i],buff,strlen(buff),0);
 								memset(buff, 0, MAXBUF);
@@ -706,7 +717,6 @@ void *handle_request(void *argv)
 		}
 	}
 	return NULL;
-	//return 0;
 }
 //int handle_request()
 #if 0
@@ -793,7 +803,7 @@ void send_msg_to_all_client(char *text, int text_size)
 	{
 		if(client_num<0)
 		{
-			printf("send msg to all client error: no client is connected!\n");
+			printf("send msg to all client error: no client is connected!>>\n");
 			break;
 		}
 		if(connect_host[i] != -1)
@@ -804,7 +814,7 @@ void send_msg_to_all_client(char *text, int text_size)
 				client_num--;
 				close(connect_host[i]);
 			}
-			printf("send msg to all client:this is socket %d \n",connect_host[i]);
+			printf("send msg to all client,this is socket%d>>",connect_host[i]);
 		}
 	}
 }
@@ -825,7 +835,7 @@ void send_msg_to_client(char *text, int text_size, int fd)
 			}
 		}
 		close(fd);
-		printf("sock%d send error ,may be disconneted\n",fd);
+		printf("sock%d send error ,may be disconneted>>",fd);
 	}
 }
 
