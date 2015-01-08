@@ -66,11 +66,11 @@
 			{	   
 			case time1:
 			   	 time1_flag=enable;
-			   	 DBG_PRINT("time1_flag= %d\n",time1_flag);
+//			   	 DBG_PRINT("time1_flag= %d\n",time1_flag);//屏蔽 yanly150108
 			     break;
 			case time2:
 				 time2_flag=enable;  
-				 DBG_PRINT("time2_flag= %d\n",time2_flag);
+//				 DBG_PRINT("time2_flag= %d\n",time2_flag);//屏蔽 yanly150108
 			     break;
 		    case time3:
 		    	//DBG_PRINT("3333\n");
@@ -78,9 +78,9 @@
 				 client_flag=enable;     //40S��ѯ�ͻ���������Ϣ
 				 node_heart_flag=enable;
 				 server_heart_flag=enable;
-				 DBG_PRINT("client_flag= %d\n",client_flag);
-				 DBG_PRINT("node_heart_flag= %d\n",node_heart_flag);
-				 DBG_PRINT("server_heart_flag= %d\n",server_heart_flag);
+//				 DBG_PRINT("client_flag= %d\n",client_flag);    //屏蔽 yanly150108
+//				 DBG_PRINT("node_heart_flag= %d\n",node_heart_flag);
+//				 DBG_PRINT("server_heart_flag= %d\n",server_heart_flag);
 				 break;
 		     
 				 	 
