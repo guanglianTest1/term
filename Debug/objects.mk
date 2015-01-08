@@ -4,5 +4,5 @@
 
 USER_OBJS :=
 
-LIBS := -lpthread -lcurl
+LIBS := -lpthread -lsqlite3 -lcurl
 

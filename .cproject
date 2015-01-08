@@ -35,9 +35,10 @@
 							<tool errorParsers="org.eclipse.cdt.core.GLDErrorParser" id="cdt.managedbuild.tool.gnu.cross.c.linker.2129070959" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker">
 								<option id="gnu.c.link.option.libs.1064018065" name="Libraries (-l)" superClass="gnu.c.link.option.libs" valueType="libs">
 									<listOptionValue builtIn="false" value="pthread"/>
+									<listOptionValue builtIn="false" value="sqlite3"/>
 									<listOptionValue builtIn="false" value="curl"/>
 								</option>
-								<option id="gnu.c.link.option.other.395450238" superClass="gnu.c.link.option.other" valueType="stringList">
+								<option id="gnu.c.link.option.other.395450238" name="Other options (-Xlinker [option])" superClass="gnu.c.link.option.other" valueType="stringList">
 									<listOptionValue builtIn="false" value="-lm"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.linker.input.182927040" superClass="cdt.managedbuild.tool.gnu.c.linker.input">

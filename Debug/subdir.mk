@@ -6,6 +6,7 @@
 C_SRCS += \
 ../HttpModule.c \
 ../Timer.c \
+../appSqlite.c \
 ../cJSON.c \
 ../json.c \
 ../main.c \
@@ -16,6 +17,7 @@ C_SRCS += \
 OBJS += \
 ./HttpModule.o \
 ./Timer.o \
+./appSqlite.o \
 ./cJSON.o \
 ./json.o \
 ./main.o \
@@ -26,6 +28,7 @@ OBJS += \
 C_DEPS += \
 ./HttpModule.d \
 ./Timer.d \
+./appSqlite.d \
 ./cJSON.d \
 ./json.d \
 ./main.d \
