@@ -13,6 +13,8 @@
 #include<sys/socket.h>
 #include<unistd.h>
 
+#include "appSqlite.h"
+
  static pthread_t time_thread;
  static pthread_t server_thread;
  static pthread_t term_thread;
@@ -22,7 +24,7 @@
 pthread_t thread_do[2];
 //pthread_t threadtest;
 
-extern uint8 listen_thread_isover;
+//extern uint8 listen_thread_isover;
 
 //void *thread_test(void *argv)
 //{
