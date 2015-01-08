@@ -52,24 +52,115 @@ uint8 server_sn=0;
 
 //add yanly141229
 typedef void (* functionP_t) (cJSON *root, int fd);
+//app fun for handle client msg for security
 static void msghandle_security_config(cJSON *root, int fd);
 static void msghandle_security_config_check(cJSON *root, int fd);
 static void msghandle_sensor_state_check(cJSON *root, int fd);
 static void msghandle_switch_state_check(cJSON *root, int fd);
 static void msghandle_switch_state_ctrl(cJSON *root, int fd);
+static void msghandle_set_global_opt(cJSON *root, int fd);
+static void msghandle_set_dev_opt(cJSON *root, int fd);
+static void msghandle_error(cJSON *root, int fd);
+static void msghandle_error(cJSON *root, int fd){}
 //
 //send respond to node
-static void upload_sensor_change_respond(char *addr, char *text, int text_len);
+static void upload_sensor_change_respond(char *addr, int num, int text_len);
 
 
 const functionP_t normalTransaction[]=
 {
 	msghandle_security_config, //0x70
-	msghandle_security_config_check,
-	msghandle_sensor_state_check,
-	msghandle_switch_state_check,
-	msghandle_switch_state_ctrl
+	msghandle_security_config_check, //71
+	msghandle_sensor_state_check, //72
+	msghandle_switch_state_check, //73
+	msghandle_switch_state_ctrl, //74
+	msghandle_error, //0x75
+	msghandle_error, //76
+	msghandle_set_global_opt, //77
+	msghandle_set_dev_opt, //78
+	msghandle_error, //79
+	msghandle_error //7a
 };
+static void msghandle_set_global_opt(cJSON *root, int fd)
+{
+	cJSON *origin = root;
+	cJSON *respond;
+	char *out;
+	int g_operator;
+	char sql[128];
+
+	printf("set global operator>>");
+	//数据解包
+	g_operator = cJSON_GetObjectItem(origin, "OperatorType")->valueint;
+
+	//数据插入数据库
+	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = 'global operator'",g_operator);
+	sqlite_updata_msg(sql);
+
+	//响应
+	respond  = cJSON_CreateObject();
+	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
+	cJSON_AddNumberToObject(respond, "Sn", 10);
+	out = cJSON_PrintUnformatted(respond);
+	send_msg_to_client(out, strlen(out),fd);
+	free(out);
+	cJSON_Delete(respond);
+
+	//转发给其他客户端
+	cJSON_ReplaceItemInObject(origin, "MsgType", cJSON_CreateNumber(SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG));
+	out = cJSON_PrintUnformatted(origin);
+	send_msg_to_all_client(out, strlen(out));
+
+	//转发给服务器
+	//...wait to do in the feature!
+
+	//release
+	free(out);
+	printf("over!\n");
+}
+static void msghandle_set_dev_opt(cJSON *root, int fd)
+{
+	cJSON *origin = root;
+	cJSON *respond;
+	char *out;
+	int operator;
+	char *ieee;
+	int num;
+
+	char sql[128];
+
+	printf("set device operator>>");
+	//数据解包
+	operator = cJSON_GetObjectItem(origin, "OperatorType")->valueint;
+	num = cJSON_GetObjectItem(origin, "SensorNum")->valueint;
+	ieee = cJSON_GetObjectItem(origin, "SecurityNodeID")->valuestring;
+
+	//数据插入数据库
+	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee='%s' and num=%d and type=%d",operator,ieee,num,SECURITY_SENSOR_TYPE);
+	sqlite_updata_msg(sql);
+
+	//响应
+	respond  = cJSON_CreateObject();
+	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_DEV_OPERATOR_MSG_RES);
+	cJSON_AddNumberToObject(respond, "Sn", 10);
+	out = cJSON_PrintUnformatted(respond);
+	send_msg_to_client(out, strlen(out),fd);
+	free(out);
+	cJSON_Delete(respond);
+
+	//转发给其他客户端
+	cJSON_ReplaceItemInObject(origin, "MsgType", cJSON_CreateNumber(SECURITY_UPLOAD_DEV_OPERATOR_MSG));
+	out = cJSON_PrintUnformatted(origin);
+	send_msg_to_all_client(out, strlen(out));
+
+	//转发给服务器
+	//...wait to do in the feature!
+
+	//release
+	free(out);
+	printf("over!\n");
+}
+#if 1
 static void msghandle_security_config(cJSON *root, int fd)
 {
 	cJSON *_root = root;
@@ -79,11 +170,23 @@ static void msghandle_security_config(cJSON *root, int fd)
 	char *Nwkaddr;
 	char opt;
 	int i,j;
-	//////
+	//
 	subsecurityConfig_t *subnod;
-	printf("msghandle_security_config\n");
+	//printf("msghandle_security_config\n");
+	printf("set security config >> ");
+	//转发给其他客户端
+	char *out;
+	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(SECURITY_CONFIG_MSG_RES));
+	out = cJSON_PrintUnformatted(_root);
+	send_msg_to_all_client(out, strlen(out));
+	printf("send to all client >> ");
+	//转发给服务器
+	//...wait to do in the feature!
+	free(out);
+	//配置更新到数据库
 	opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
 	NodeList_array = cJSON_GetObjectItem (_root, "NodeList");
+	sqlite_updata_global_operator(opt);//handle dababase for global operator
 	if(NodeList_array)
 	{
 		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
@@ -94,7 +197,79 @@ static void msghandle_security_config(cJSON *root, int fd)
 		    {
 		    	SecurityNodeID = cJSON_GetObjectItem(NodeList_item,"SecurityNodeID")->valuestring;
 		    	Nwkaddr = cJSON_GetObjectItem(NodeList_item,"Nwkaddr")->valuestring;
-		    	printf("ieee:%s,addr:%s\n",SecurityNodeID,Nwkaddr);
+		    	//printf("ieee:%s,addr:%s\n",SecurityNodeID,Nwkaddr);
+		    	SubNode_array = cJSON_GetObjectItem (NodeList_item, "SubNode");
+		    	subnode_cnt = cJSON_GetArraySize (SubNode_array ); //获取数组的大小
+		    	subnod = (subsecurityConfig_t *)malloc(subnode_cnt*sizeof(subsecurityConfig_t));//malloc //
+		    	if(subnod ==NULL)
+		    	{
+		    		printf("malloc fail!\n");
+		    		return;
+		    	}
+		    	for(j=0;j<subnode_cnt;j++)
+		    	{
+		    		SubNode_item = cJSON_GetArrayItem(SubNode_array,j);
+		    		if(SubNode_item)
+		    		{
+		    			subnod[j].type = cJSON_GetObjectItem(SubNode_item, "Type")->valueint;
+		    			subnod[j].subtype = cJSON_GetObjectItem(SubNode_item, "SubType")->valueint;
+		    			subnod[j].num = cJSON_GetObjectItem(SubNode_item, "Num")->valueint;
+		    			subnod[j].info = cJSON_GetObjectItem(SubNode_item,"Info")->valuestring;
+		    			subnod[j].operator = cJSON_GetObjectItem(SubNode_item, "OperatorType")->valueint;
+//		    			printf("type:%d,subtype:%d,num:%d,info:%s,operator:%d\n",subnod[j].type,
+//		    					subnod[j].subtype,subnod[j].num,subnod[j].info,subnod[j].operator);
+
+		    		}
+		    	}
+		    	//handle insert config to database
+		    	sqlite_insert_security_config_table(SecurityNodeID, Nwkaddr, subnod, subnode_cnt);
+		    	//向节点设备请求开关当前状态
+		    	for(j=0;j<subnode_cnt;j++)
+		    	{
+		    		printf("request switch status for ieee %s,num",SecurityNodeID);
+
+		    		if(subnod[j].type == SECURITY_SWITCH_TYPE)
+		    		{
+		    			char buff[11] ={0x02,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00};
+		    			buff[10] = subnod[j].num;
+		    			send_data_to_dev_security(Nwkaddr, buff, 11);
+		    			printf("%j,",j);
+		    		}
+		    	}
+		    	printf(">>over!\n");
+		    	//free
+		    	free(subnod);
+		    }
+		}
+	}
+}
+#else
+static void msghandle_security_config(cJSON *root, int fd)
+{
+	cJSON *_root = root;
+	cJSON *NodeList_array, *NodeList_item;	int node_cnt;
+	cJSON *SubNode_array, *SubNode_item;	int subnode_cnt;
+	char *SecurityNodeID;
+	char *Nwkaddr;
+	char opt;
+	int i,j;
+	//
+	subsecurityConfig_t *subnod;
+	printf("msghandle_security_config\n");
+	opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
+	NodeList_array = cJSON_GetObjectItem (_root, "NodeList");
+	if(NodeList_array)
+	{
+		//handle database
+		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
+		for(i=0;i<node_cnt;i++)
+		{
+			NodeList_item = cJSON_GetArrayItem(NodeList_array,i);
+		    if(NodeList_item)
+		    {
+		    	SecurityNodeID = cJSON_GetObjectItem(NodeList_item,"SecurityNodeID")->valuestring;
+		    	Nwkaddr = cJSON_GetObjectItem(NodeList_item,"Nwkaddr")->valuestring;
+		    	//printf("ieee:%s,addr:%s\n",SecurityNodeID,Nwkaddr);
 		    	SubNode_array = cJSON_GetObjectItem (NodeList_item, "SubNode");
 		    	subnode_cnt = cJSON_GetArraySize (SubNode_array ); //获取数组的大小
 		    	subnod = (subsecurityConfig_t *)malloc(subnode_cnt*sizeof(subsecurityConfig_t));//malloc //
@@ -124,8 +299,20 @@ static void msghandle_security_config(cJSON *root, int fd)
 		    	free(subnod);
 		    }
 		}
+		//转发给其他客户端
+		char *out;
+		cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(SECURITY_CONFIG_MSG_RES));
+		out = cJSON_PrintUnformatted(_root);
+		send_msg_to_all_client(out, strlen(out));
+		//转发给服务器
+		//...wait to do in the feature!
+
+		//handle request switch status to dev
+
+		free(out);
 	}
 }
+#endif
 #if 0
 static void msghandle_security_config_check(cJSON *root, int fd)
 {
@@ -194,23 +381,26 @@ static void msghandle_security_config_check(cJSON *root, int fd)
 	cJSON *SubNodeItem, *SubNodeArray;
     int opt ;
     char *out=NULL;
-
+    printf("security config check>>");
 //query database:
     q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
     if(q_data ==NULL)
     {
+    	printf("query db error>>\n");
     	sqlite_free_query_result(q_data);
     	return;
     }
     ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
     if(ieee == NULL)
     {
+    	printf("query db error>>\n");
     	sqlite_free_query_result(ieee);
     	return;
     }
     opt = sqlite_query_global_operator();
     if(opt ==-1)
     {
+    	printf("query db error>>\n");
     	return;
     }
 //organize json package
@@ -246,12 +436,14 @@ static void msghandle_security_config_check(cJSON *root, int fd)
 	out = cJSON_PrintUnformatted(sroot);
 	//printf("out=%s\n",out);
 //send msg to client:
+	printf("send msg to all client>>");
 	send_msg_to_client(out, strlen(out), fd);
 //free:
 	cJSON_Delete(sroot);
 	free(out);
 	sqlite_free_query_result(q_data);
 	sqlite_free_query_result(ieee);
+	printf("over!\n");
 	return;
 }
 #endif
@@ -270,7 +462,7 @@ static void msghandle_switch_state_ctrl(cJSON *root, int fd)
 	char buff[30] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
 	int b_len;
 
-	printf("msghandle_switch_state_ctrl\n");
+	printf("control switch>>");
 	Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
 	SecurityNodeID = cJSON_GetObjectItem(_root,"SecurityNodeID")->valuestring;
 	Nwkaddr = cJSON_GetObjectItem(_root,"Nwkaddr")->valuestring;
@@ -279,17 +471,17 @@ static void msghandle_switch_state_ctrl(cJSON *root, int fd)
 	buff[10] = SwitchNum;
 	buff[11] = SwitchStatus;
 	b_len = 12;
-
 	send_data_to_dev_security(Nwkaddr, buff, b_len);
+	printf("respond>>over!\n");
 
 }
 //////////////
-static void upload_sensor_change_respond(char *addr, char *text, int text_len)
+static void upload_sensor_change_respond(char *addr, int num, int text_len)
 {
 	char buff[11] ={0x00,0x02,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00};
 	int b_len = 11;
-	buff[10] = text[9];
-	printf("sensor num%d\n",buff[10]);
+	buff[10] = num;
+	printf("sensor upload respond>>>>buff:%s\n",buff);
 	send_data_to_dev_security(addr, buff, b_len);
 }
 
@@ -488,7 +680,7 @@ int detach_interface_msg_client(char *text,int textlen)
 	{
 		if(msgtype ==0x10)    //this is debug add yan141231
 		{
-			status = DETACH_BELONG_SECURITY;
+			status = DETACH_BELONG_IN_COMMON;
 		}
 		else
 			status = DETACH_BELONG_ENERGY;
@@ -507,27 +699,21 @@ int detach_interface_msg_client(char *text,int textlen)
 int client_msg_handle_security(char *buff, int size, int fd)
 {
 	int MsgType;
-//	int Sn;
-//	char Nwkaddr[4];
-//	char SecurityNodeID[16];
-//	int SensorNum;
-//	int SwitchStatus;
 	cJSON *root;
 	int cfd = fd;
 	cJSON *sroot;
 	char *sout;
-	int i;
 
 	root=cJSON_Parse(buff);
 	if(root)
 	{
 		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
-		if(MsgType != 0x10)   //this is debug add yanly141231
-		{
-			normalTransaction[MsgType-112](root, cfd);
-		}
+		normalTransaction[MsgType-112](root, cfd);  //handle message normal
 		//respond: when normal set,not request
-		if((MsgType == 0x70)||(MsgType == 0x74))
+		if(	(MsgType == SECURITY_SWITCH_CONTROL_MSG)
+			//(MsgType == SECURITY_SET_GLOBAL_OPERATOR_MSG)||
+			//(MsgType == SECURITY_SET_DEV_OPERATOR_MSG)
+															)
 		{
 			sroot=cJSON_CreateObject();
 			cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
@@ -541,7 +727,35 @@ int client_msg_handle_security(char *buff, int size, int fd)
     cJSON_Delete(root);
     return 0;
 }
+int client_msg_handle_in_common(char *buff, int size, int fd)
+{
+	int MsgType;
+	cJSON *root;
+	int cfd = fd;
+	cJSON *sroot;
+	char *sout;
 
+	root=cJSON_Parse(buff);
+	if(root)
+	{
+		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
+		sroot=cJSON_CreateObject();
+		switch (MsgType)
+		{
+			case HeartMsg:
+				cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
+				cJSON_AddNumberToObject(sroot,"Sn",				10);
+				sout=cJSON_Print(sroot);
+				break;
+			default:break;
+		}
+		send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
+		cJSON_Delete(sroot);
+		free(sout);
+		cJSON_Delete(root);
+	}
+    return 0;
+}
 void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket)
 {
     
@@ -935,46 +1149,59 @@ void parse_json_node(char *text,uint8 textlen)
 
    }
 /****************************************************************************************/
-//
-//int detach_5002_message22(char *text, int textlen)
-//{
-//	cJSON *root;
-//	int msgtype;
-//    char *ieee;
-//    char *addr;
-//	int ret;
-//
-//	char **data;
-//	int col,row;
-//	char *sql;
-//
-//    root=cJSON_Parse(text);
-//	if (!root)
-//    {
-//	 	return DETACH_PRASE_ERROR;
-//    }
-//	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
-//	if(msgtype == TERM_MSGTYPE)
-//	{
-//		cJSON_Delete(root);
-//		return DETACH_MSGTYPE_ERROR;
-//	}
-//	ieee =cJSON_GetObjectItem(root, "IEEE")->valuestring;
-//	sprintf(sql,"SELECT ieee FROM stable where ieee =%s",ieee);
-//	if(sqlite_query_msg(data, &row, &col, sql)!=1)
-//	{
-//		sqlite_free_query_result(data);
-//		return DETACH_IEEE_ERROR;
-//	}
-//
-//	return ret;
-//
-//
-//
-//}
+int detach_5002_message22(char *text, int textlen)
+{
+	cJSON *root=NULL;
+	int msgtype;
+    char *ieee;
+
+	char **data=NULL;
+	int col,row;
+	char sql[512];//char *sql;not init
+
+	int ret=0;
+
+    root=cJSON_Parse(text);
+	if (!root)
+    {
+	 	return DETACH_PRASE_ERROR;
+    }
+	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+	if(msgtype != TERM_MSGTYPE)
+	{
+		cJSON_Delete(root);
+		return (ret = DETACH_MSGTYPE_ERROR);
+	}
+	printf("recevie 5002 callback message 22 >>");
+	ieee =cJSON_GetObjectItem(root, "IEEE")->valuestring;
+	//printf("ret is %d  %s\n",ret,ieee);
+	sprintf(sql,"SELECT ieee FROM stable where ieee ='%s'",ieee);
+	//printf("ret is %d  %s\n",ret,sql);
+	data = sqlite_query_msg(&row, &col, sql);
+	//printf("ret is %d\n",ret);
+	if(data == NULL)
+	{
+		sprintf(sql,"SELECT ieee FROM etable where ieee ='%s'",ieee);
+		data = sqlite_query_msg(&row, &col, sql);
+		if(data == NULL)
+		{
+			ret =  DETACH_IEEE_NOT_FOUND_ERROR;
+		}
+		else
+		{
+			ret = DETACH_BELONG_ENERGY;
+		}
+	}
+	else
+	{
+		ret = DETACH_BELONG_SECURITY;
+	}
+	cJSON_Delete(root);
+	sqlite_free_query_result(data);
+	return ret;
+}
 int parse_json_node_security(char *text,int textlen)
 {
-
 	cJSON *root ;
 	cJSON *sroot;
 	char *sout;
@@ -983,12 +1210,15 @@ int parse_json_node_security(char *text,int textlen)
     char *IEEE=NULL;
     char *Nwkaddr=NULL;
     char *data =NULL;
-	uint8 databuf_len;
+	int databuf_len;
 	char switchnum,switchstatus,sensornum,sensorstatus;
-	char *databuf=NULL;
+	int *databuf=NULL;
 	int s_len;
 	int i;
 
+	char command_num;
+	char  cmd_respond_status;
+	char sql[128]; //ample size
 
     root=cJSON_Parse(text);
 	if (!root)
@@ -997,87 +1227,170 @@ int parse_json_node_security(char *text,int textlen)
     }
 	{
 		msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
-		printf("node_msgtype=%d\n",msgtype);
+//		printf("node_msgtype=%d\n",msgtype);
 		switch(msgtype)
         {
 			case TERM_MSGTYPE:
 				IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring;
-				printf("IEEE=%s\n",IEEE);
-
+				//printf("IEEE=%s\n",IEEE);
 				Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
-				printf("Nwkaddr=%s\n",Nwkaddr);
-
+				//printf("Nwkaddr=%s\n",Nwkaddr);
 				data=cJSON_GetObjectItem(root, "data")->valuestring;
-				printf("data=%s\n",data);
-
+				//printf("data=%s\n",data);
 				databuf_len=strlen(data)/2;
-				databuf=(uint8 *)malloc(sizeof(uint8)*40);//databuf=(uint8 *)malloc(sizeof(uint8)*databuf_len);
+				databuf=(int *)malloc(sizeof(int)*40);//databuf=(uint8 *)malloc(sizeof(uint8)*databuf_len);
 				//之前没有修改前一直会出现malloc(): memory corruption (fast)的问题；具体触发原因不详，猜测databuf_len传入有问题？！
 				if(databuf ==NULL)
 				{
 					printf("malloc fail!\n");
 				}
-				printf("databuf= ");
+				//printf("databuf= ");
 				for(i=0;i<databuf_len;i++)
 				{
 					sscanf(data+i*2,"%02X",databuf+i);
-					printf("%0X ",databuf[i]);
+					//printf("%0X ",databuf[i]);
 				}
-				printf("databuf_len=%d \n",databuf_len);
-
-				//handle msg:
+				//printf("databuf_len=%d \n",databuf_len);
+				//串口数据检验
 				sroot=cJSON_CreateObject();
-				switch (databuf[1])
+				command_num = databuf[0];
+				switch (command_num)
 				{
 					case 0x00://传感器上传的
-						printf("upload :node sensor upload\n");
+						printf("upload sensor change >>");
 						sensornum = databuf[databuf_len-2];
 						sensorstatus = databuf[databuf_len-1];
-						cJSON_AddNumberToObject(sroot,"MsgType",				118);
-						cJSON_AddNumberToObject(sroot,"Sn",						10);
-						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
-						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
-						cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
-						cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
-						sout = cJSON_PrintUnformatted(sroot);
-						printf("%s\n",sout);
-						s_len = strlen(sout);
-						//发送给所有在线客户端
-						send_msg_to_all_client(sout, s_len);
-						//发送给云代理服务器  141230
-						//....no do
 						//响应给节点
-						upload_sensor_change_respond(Nwkaddr, databuf, databuf_len);
+						upload_sensor_change_respond(Nwkaddr, sensornum, databuf_len);
+						//从数据库中查询布撤防状态，看是否需要上传传感器变化状态 //add yanly150107
+						char q_sql[128];int qrow,qcol;char **qopr;int opt;char qcnt;
+						for(qcnt=0;qcnt<2;qcnt++)
+						{
+							if(qcnt==0)
+								sprintf(q_sql, "select operator from stable where ieee = 'global operator'");
+							if(qcnt==1)
+								sprintf(q_sql, "select operator from stable where ieee = '%s' "
+										"and type=%d and num=%d",IEEE,SECURITY_SENSOR_TYPE,sensornum);
+							qopr = sqlite_query_msg(&qrow, &qcol, q_sql);
+							if(qopr!=NULL)
+							{
+								opt = atoi(qopr[qcol]);
+								if(opt)
+								{
+								}
+								else
+								{
+									//sqlite_free_query_result(qopr);
+									printf("ieee operator is not set \n");
+									qopr = NULL;
+									break;
+								}
+							}
+							else
+							{
+								//sqlite_free_query_result(qopr);
+								printf("ieee  operator is null\n");
+								break;
+							}
+						}
+						if(qopr!=NULL)
+						{
+							printf("format correct>>");
+							cJSON_AddNumberToObject(sroot,"MsgType",				118);
+							cJSON_AddNumberToObject(sroot,"Sn",						10);
+							cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+							cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+							cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
+							cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
+							sout = cJSON_PrintUnformatted(sroot);
+							//printf("%s\n",sout);
+							s_len = strlen(sout);
+							//printf("send message to all client and server!\n");
+							//发送给所有在线客户端
+							send_msg_to_all_client(sout, s_len);
+							//发送给云代理服务器  141230
+							//....no do
+							free(sout);
+						}
+						else
+						{
+							printf("uneable to upload sensor>>");
+						}
+						sqlite_free_query_result(qopr);
 						break;
-					case 0x02://控制智能插座的响应
-						printf("respond :ctrl switch\n");
-						switchnum = databuf[databuf_len-2];
-						switchstatus = databuf[databuf_len-1];
-						cJSON_AddNumberToObject(sroot,"MsgType",				117);
-						cJSON_AddNumberToObject(sroot,"Sn",						10);
-						cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
-						cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
-						cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
-						cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
-						sout = cJSON_PrintUnformatted(sroot);
-						printf("%s\n",sout);
-						s_len = strlen(sout);
-						//发送给所有在线客户端
-						send_msg_to_all_client(sout, s_len);
-						//发送给云代理服务器  141230
-						//....no do
+					case 0x01://控制智能插座的响应
+						printf("respond after the client control switch >>");
+						cmd_respond_status = databuf[9];
+						if(cmd_respond_status !=0)
+						{
+							printf("serial data format error>>");
+						}
+						else
+						{
+							switchnum = databuf[databuf_len-2];
+							switchstatus = databuf[databuf_len-1];
+							cJSON_AddNumberToObject(sroot,"MsgType",				SECURITY_SWITCH_UPLOAD_MSG);
+							cJSON_AddNumberToObject(sroot,"Sn",						10);
+							cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+							cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+							cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
+							cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
+							sout = cJSON_PrintUnformatted(sroot);
+							//printf("%s\n",sout);
+							s_len = strlen(sout);
+							//printf("send message to all client and server!\n");
+							//发送给所有在线客户端
+							send_msg_to_all_client(sout, s_len);
+							//发送给云代理服务器  141230
+							//....no do
+							//更新到数据库中
+							sprintf(sql,"UPDATE stable SET operator=%d WHERE ieee ='%s' and type=%d and num=%d"
+									,switchstatus,IEEE,SECURITY_SWITCH_TYPE,switchnum);
+							//printf("updata sql:%s",sql);
+							sqlite_updata_msg(sql);
+							free(sout);
+						}
+						break;
+
+					case 0x02:
+						printf("respond after the client control switch >>");
+						cmd_respond_status = databuf[9];
+						if(cmd_respond_status !=0)
+						{
+							printf("serial data format error>>");
+						}
+						else
+						{
+							switchnum = databuf[databuf_len-2];
+							switchstatus = databuf[databuf_len-1];
+							cJSON_AddNumberToObject(sroot,"MsgType",				SECURITY_SWITCH_UPLOAD_MSG);
+							cJSON_AddNumberToObject(sroot,"Sn",						10);
+							cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+							cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+							cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
+							cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
+							sout = cJSON_PrintUnformatted(sroot);
+							//printf("%s\n",sout);
+							s_len = strlen(sout);
+							//printf("send message to all client and server!\n");
+							//发送给所有在线客户端
+							send_msg_to_all_client(sout, s_len);
+							//发送给云代理服务器  141230
+							//....no do
+							//更新到数据库中
+							sprintf(sql,"UPDATE stable SET operator=%d WHERE ieee ='%s' and type=%d and num=%d"
+									,switchstatus,IEEE,SECURITY_SWITCH_TYPE,switchnum);
+							//printf("updata sql:%s",sql);
+							sqlite_updata_msg(sql);
+							free(sout);
+						}
 						break;
 					default:
 						break;
 				}
+				printf("over!\n");
 				cJSON_Delete(sroot);
 				free(databuf);
-				free(sout);
-				break;
-
-			case HEART_MSGTYPE:
-//        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
-//        	  printf("node heart_ack=%s\n",heart_beat);
 				break;
 			default: break;
         }

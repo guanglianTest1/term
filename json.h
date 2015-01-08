@@ -31,9 +31,10 @@
 /*client detach interface ***********************************************************///add yanly141229
 #define	DETACH_PRASE_ERROR					-1
 #define DETACH_MSGTYPE_ERROR				-2
-#define DETACH_IEEE_ERROR					-3
+#define DETACH_IEEE_NOT_FOUND_ERROR			-3
 #define	DETACH_BELONG_ENERGY				0
 #define	DETACH_BELONG_SECURITY				1
+#define DETACH_BELONG_IN_COMMON				2
 /************************************************************************************/
 
 uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket);
@@ -46,4 +47,6 @@ void parse_json_server(char *text,uint8 textlen);
 extern int parse_json_node_security(char *text,int textlen);
 extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
 extern int client_msg_handle_security(char *buff, int size, int fd);
+extern int client_msg_handle_in_common(char *buff, int size, int fd);
+extern int detach_5002_message22(char *text, int textlen);
 #endif
