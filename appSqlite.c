@@ -9,9 +9,7 @@
 #include <sqlite3.h>
 #include <stdlib.h>
 #include "appSqlite.h"
-
-#define		DATABASE_PATH		"/mnt/nfs/node.db"  //数据库存放路径
-#define     GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
+#include "user_config.h"
 
 sqlite3* node_db = NULL;
 
