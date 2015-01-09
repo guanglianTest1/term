@@ -1,5 +1,6 @@
 HttpModule.d HttpModule.o: ../HttpModule.c ../json.h ../sysinit.h \
- ../timer.h ../cJSON.h ../net.h ../HttpModule.h ../term.h
+ ../timer.h ../cJSON.h ../net.h ../user_config.h ../HttpModule.h \
+ ../term.h
 
 ../json.h:
 
@@ -10,6 +11,8 @@ HttpModule.d HttpModule.o: ../HttpModule.c ../json.h ../sysinit.h \
 ../cJSON.h:
 
 ../net.h:
+
+../user_config.h:
 
 ../HttpModule.h:
 
