@@ -15,6 +15,8 @@
 #ifndef _NET_H
 #define _NET_H
 #include"sysinit.h"
+#include "user_config.h"
+
 
 //void connect2dvr(void);
 
@@ -23,18 +25,18 @@
 //#define GatewayID  88888888    //���صı��
 
 
-#define CLIENT_PORT    5030  //��ͻ���ͨ�Ŷ˿�
-//#define NODE_PORT      5018  //��ڵ��豸ͨ�Ŷ˿�
-#define NODE_PORT      5002  //��ڵ��豸ͨ�Ŷ˿�
-//#define SERVER_PORT    5031  //�������ͨ�Ŷ˿�
-#define SERVER_PORT    5040  //�������ͨ�Ŷ˿�
-
-//#define GATEWAY_IPADDR   "192.168.0.102"
-//#define SERVER_IPADDR  "192.168.0.100"
-#define GATEWAY_IPADDR   "192.168.1.137"
-#define SERVER_IPADDR  "192.168.1.111"
-
-#define MAX_CLIENT_NUM 16   //���ͻ���������
+//#define CLIENT_PORT    5030  //��ͻ���ͨ�Ŷ˿�
+////#define NODE_PORT      5018  //��ڵ��豸ͨ�Ŷ˿�
+//#define NODE_PORT      5002  //��ڵ��豸ͨ�Ŷ˿�
+////#define SERVER_PORT    5031  //�������ͨ�Ŷ˿�
+//#define SERVER_PORT    5040  //�������ͨ�Ŷ˿�
+//
+////#define GATEWAY_IPADDR   "192.168.0.102"
+////#define SERVER_IPADDR  "192.168.0.100"
+//#define GATEWAY_IPADDR   "192.168.1.137"
+//#define SERVER_IPADDR  "192.168.1.111"
+//
+//#define MAX_CLIENT_NUM 16   //���ͻ���������
 
 
 //#define NODE_NUM 2

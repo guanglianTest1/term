@@ -35,6 +35,16 @@
 #define	DETACH_BELONG_ENERGY				0
 #define	DETACH_BELONG_SECURITY				1
 #define DETACH_BELONG_IN_COMMON				2
+
+/*json error ***********************************************************/
+#define JSON_OK								0
+#define JSON_KEY_ERROR						-5
+#define JSON_VALUE_ERROR					-6
+
+
+#define MALLOC_ERROR						1
+
+
 /************************************************************************************/
 
 uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket);
@@ -49,4 +59,5 @@ extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
 extern int client_msg_handle_security(char *buff, int size, int fd);
 extern int client_msg_handle_in_common(char *buff, int size, int fd);
 extern int detach_5002_message22(char *text, int textlen);
+extern void rec_json_error_respond(char type, int ret, int fd);
 #endif

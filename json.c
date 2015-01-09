@@ -51,17 +51,17 @@ char *GatewayID="8888888";
 uint8 server_sn=0;
 
 //add yanly141229
-typedef void (* functionP_t) (cJSON *root, int fd);
+typedef int (* functionP_t) (cJSON *root, int fd);
 //app fun for handle client msg for security
-static void msghandle_security_config(cJSON *root, int fd);
-static void msghandle_security_config_check(cJSON *root, int fd);
-static void msghandle_sensor_state_check(cJSON *root, int fd);
-static void msghandle_switch_state_check(cJSON *root, int fd);
-static void msghandle_switch_state_ctrl(cJSON *root, int fd);
-static void msghandle_set_global_opt(cJSON *root, int fd);
-static void msghandle_set_dev_opt(cJSON *root, int fd);
-static void msghandle_error(cJSON *root, int fd);
-static void msghandle_error(cJSON *root, int fd){}
+static int msghandle_security_config(cJSON *root, int fd);
+static int msghandle_security_config_check(cJSON *root, int fd);
+static int msghandle_sensor_state_check(cJSON *root, int fd);
+static int msghandle_switch_state_check(cJSON *root, int fd);
+static int msghandle_switch_state_ctrl(cJSON *root, int fd);
+static int msghandle_set_global_opt(cJSON *root, int fd);
+static int msghandle_set_dev_opt(cJSON *root, int fd);
+static int msghandle_error(cJSON *root, int fd);
+static int msghandle_error(cJSON *root, int fd){return 0;}
 //
 //send respond to node
 static void upload_sensor_change_respond(char *addr, int num, int text_len);
@@ -81,7 +81,7 @@ const functionP_t normalTransaction[]=
 	msghandle_error, //79
 	msghandle_error //7a
 };
-static void msghandle_set_global_opt(cJSON *root, int fd)
+static int msghandle_set_global_opt(cJSON *root, int fd)
 {
 	cJSON *origin = root;
 	cJSON *respond;
@@ -90,17 +90,24 @@ static void msghandle_set_global_opt(cJSON *root, int fd)
 	char sql[128];
 
 	printf("set global operator>>");
+	////////////////////////////////////////////////////////////////////////////////预取json异常处理
+	if(cJSON_GetObjectItem(origin, "OperatorType") == NULL)
+		return JSON_KEY_ERROR;
+	////////////////////////////////////////////////////////////////////////////////
 	//数据解包
 	g_operator = cJSON_GetObjectItem(origin, "OperatorType")->valueint;
+	if(g_operator >1)
+		return JSON_VALUE_ERROR;
 
 	//数据插入数据库
-	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = 'global operator'",g_operator);
+	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",g_operator,GLOBAL_OPERATOR_IN_IEEE_NAME);
 	sqlite_updata_msg(sql);
 
 	//响应
 	respond  = cJSON_CreateObject();
 	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
 	cJSON_AddNumberToObject(respond, "Sn", 10);
+	cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
 	out = cJSON_PrintUnformatted(respond);
 	send_msg_to_client(out, strlen(out),fd);
 	free(out);
@@ -117,8 +124,9 @@ static void msghandle_set_global_opt(cJSON *root, int fd)
 	//release
 	free(out);
 	printf("over!\n");
+	return	JSON_OK;
 }
-static void msghandle_set_dev_opt(cJSON *root, int fd)
+static int msghandle_set_dev_opt(cJSON *root, int fd)
 {
 	cJSON *origin = root;
 	cJSON *respond;
@@ -130,10 +138,19 @@ static void msghandle_set_dev_opt(cJSON *root, int fd)
 	char sql[128];
 
 	printf("set device operator>>");
+	////////////////////////////////////////////////////////////////////////////////预取json异常处理
+	if((cJSON_GetObjectItem(origin, "OperatorType") == NULL)||
+		(cJSON_GetObjectItem(origin, "SensorNum") == NULL)||
+		(cJSON_GetObjectItem(origin, "SecurityNodeID") == NULL)
+			)
+		return JSON_KEY_ERROR;
 	//数据解包
 	operator = cJSON_GetObjectItem(origin, "OperatorType")->valueint;
 	num = cJSON_GetObjectItem(origin, "SensorNum")->valueint;
 	ieee = cJSON_GetObjectItem(origin, "SecurityNodeID")->valuestring;
+	if((operator > 1)||
+			(num>4))
+		return JSON_VALUE_ERROR;
 
 	//数据插入数据库
 	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee='%s' and num=%d and type=%d",operator,ieee,num,SECURITY_SENSOR_TYPE);
@@ -143,6 +160,7 @@ static void msghandle_set_dev_opt(cJSON *root, int fd)
 	respond  = cJSON_CreateObject();
 	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_DEV_OPERATOR_MSG_RES);
 	cJSON_AddNumberToObject(respond, "Sn", 10);
+	cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
 	out = cJSON_PrintUnformatted(respond);
 	send_msg_to_client(out, strlen(out),fd);
 	free(out);
@@ -159,9 +177,10 @@ static void msghandle_set_dev_opt(cJSON *root, int fd)
 	//release
 	free(out);
 	printf("over!\n");
+	return JSON_OK;
 }
 #if 1
-static void msghandle_security_config(cJSON *root, int fd)
+static int msghandle_security_config(cJSON *root, int fd)
 {
 	cJSON *_root = root;
 	cJSON *NodeList_array, *NodeList_item;	int node_cnt;
@@ -172,8 +191,53 @@ static void msghandle_security_config(cJSON *root, int fd)
 	int i,j;
 	//
 	subsecurityConfig_t *subnod;
-	//printf("msghandle_security_config\n");
+
 	printf("set security config >> ");
+	////////////////////////////////////////////////////////////////////////////////预取json异常处理
+	{
+		if((cJSON_GetObjectItem(_root, "GlobalOpt")) == NULL)
+		{
+			return JSON_KEY_ERROR;
+		}
+		if( (NodeList_array = cJSON_GetObjectItem(_root, "NodeList")) == NULL)
+		{
+			return JSON_KEY_ERROR;
+		}
+		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
+		for(i=0;i<node_cnt;i++)
+		{
+			if((NodeList_item = cJSON_GetArrayItem(NodeList_array,i)) == NULL)
+			{
+				return JSON_KEY_ERROR;
+			}
+			if((cJSON_GetObjectItem(NodeList_item,"SecurityNodeID") == NULL)||
+					(cJSON_GetObjectItem(NodeList_item,"Nwkaddr")==NULL) ||
+					((SubNode_array = cJSON_GetObjectItem (NodeList_item, "SubNode"))==NULL)
+					)
+			{
+				return JSON_KEY_ERROR;
+			}
+			subnode_cnt = cJSON_GetArraySize (SubNode_array); //获取数组的大小
+			for(j=0;j<subnode_cnt;j++)
+			{
+				if((SubNode_item = cJSON_GetArrayItem(SubNode_array,j)) == NULL)
+				{
+					return JSON_KEY_ERROR;
+				}
+				if((cJSON_GetObjectItem(SubNode_item, "Type")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item, "SubType")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item, "Num")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item,"Info")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item, "OperatorType")==NULL)
+						)
+				{
+					return JSON_KEY_ERROR;
+				}
+			}
+		}
+	}
+	///////////////////////////////////////////////////////////////////////////////
+	opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
 	//转发给其他客户端
 	char *out;
 	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(SECURITY_CONFIG_MSG_RES));
@@ -184,9 +248,9 @@ static void msghandle_security_config(cJSON *root, int fd)
 	//...wait to do in the feature!
 	free(out);
 	//配置更新到数据库
-	opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
+	//opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
 	NodeList_array = cJSON_GetObjectItem (_root, "NodeList");
-	sqlite_updata_global_operator(opt);//handle dababase for global operator
+	//sqlite_updata_global_operator(opt);//handle dababase for global operator   //屏蔽全局布防
 	if(NodeList_array)
 	{
 		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
@@ -204,7 +268,7 @@ static void msghandle_security_config(cJSON *root, int fd)
 		    	if(subnod ==NULL)
 		    	{
 		    		printf("malloc fail!\n");
-		    		return;
+		    		return MALLOC_ERROR;
 		    	}
 		    	for(j=0;j<subnode_cnt;j++)
 		    	{
@@ -230,10 +294,11 @@ static void msghandle_security_config(cJSON *root, int fd)
 
 		    		if(subnod[j].type == SECURITY_SWITCH_TYPE)
 		    		{
-		    			char buff[11] ={0x02,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00};
+		    			char buff[12] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
 		    			buff[10] = subnod[j].num;
-		    			send_data_to_dev_security(Nwkaddr, buff, 11);
-		    			printf("%j,",j);
+		    			buff[11] = subnod[j].operator;
+		    			send_data_to_dev_security(Nwkaddr, buff, 12);
+		    			printf("%d,",j);
 		    		}
 		    	}
 		    	printf(">>over!\n");
@@ -242,6 +307,7 @@ static void msghandle_security_config(cJSON *root, int fd)
 		    }
 		}
 	}
+	return JSON_OK;
 }
 #else
 static void msghandle_security_config(cJSON *root, int fd)
@@ -367,7 +433,7 @@ static void msghandle_security_config_check(cJSON *root, int fd)
 	sqlite_free_query_result(q_data);
 }
 #else
-static void msghandle_security_config_check(cJSON *root, int fd)
+static int msghandle_security_config_check(cJSON *root, int fd)
 {
 	char **q_data=NULL;
 	char **ieee=NULL;int ieee_row,ieee_col;
@@ -388,20 +454,20 @@ static void msghandle_security_config_check(cJSON *root, int fd)
     {
     	printf("query db error>>\n");
     	sqlite_free_query_result(q_data);
-    	return;
+    	return JSON_VALUE_ERROR;
     }
     ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
     if(ieee == NULL)
     {
     	printf("query db error>>\n");
     	sqlite_free_query_result(ieee);
-    	return;
+    	return JSON_VALUE_ERROR;
     }
     opt = sqlite_query_global_operator();
     if(opt ==-1)
     {
     	printf("query db error>>\n");
-    	return;
+    	return JSON_VALUE_ERROR;
     }
 //organize json package
     sroot = cJSON_CreateObject();
@@ -444,17 +510,19 @@ static void msghandle_security_config_check(cJSON *root, int fd)
 	sqlite_free_query_result(q_data);
 	sqlite_free_query_result(ieee);
 	printf("over!\n");
-	return;
+	return JSON_OK;
 }
 #endif
-static void msghandle_sensor_state_check(cJSON *root, int fd){}
-static void msghandle_switch_state_check(cJSON *root, int fd){}
-static void msghandle_switch_state_ctrl(cJSON *root, int fd)
+static int msghandle_sensor_state_check(cJSON *root, int fd){
+	return 0;
+}
+static int msghandle_switch_state_check(cJSON *root, int fd){
+	return 0;
+}
+static int msghandle_switch_state_ctrl(cJSON *root, int fd)
 {
 
 	cJSON *_root = root;
-//	int MsgType;
-	int Sn;
 	char *SecurityNodeID;
 	char *Nwkaddr;
 	int SwitchNum;
@@ -463,7 +531,30 @@ static void msghandle_switch_state_ctrl(cJSON *root, int fd)
 	int b_len;
 
 	printf("control switch>>");
-	Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
+	//Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
+	////////////////////////////////////////////////////////////////////////////////预取json异常处理
+	if((cJSON_GetObjectItem(_root,"SecurityNodeID") == NULL)||
+			(cJSON_GetObjectItem(_root,"Nwkaddr") == NULL) ||
+			(cJSON_GetObjectItem(_root, "SwitchNum") == NULL) ||
+			(cJSON_GetObjectItem(_root, "SwitchStatus") == NULL)
+			)
+	{
+		return JSON_KEY_ERROR;
+	}
+	////////////////////////////////////////////////////////////////////////////////
+	//响应客户端
+	//响应
+	cJSON *respond;
+	char *out;
+	respond  = cJSON_CreateObject();
+	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
+	cJSON_AddNumberToObject(respond, "Sn", 10);
+	cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
+	out = cJSON_PrintUnformatted(respond);
+	send_msg_to_client(out, strlen(out),fd);
+	free(out);
+	cJSON_Delete(respond);
+
 	SecurityNodeID = cJSON_GetObjectItem(_root,"SecurityNodeID")->valuestring;
 	Nwkaddr = cJSON_GetObjectItem(_root,"Nwkaddr")->valuestring;
 	SwitchNum = cJSON_GetObjectItem(_root, "SwitchNum")->valueint;
@@ -473,7 +564,7 @@ static void msghandle_switch_state_ctrl(cJSON *root, int fd)
 	b_len = 12;
 	send_data_to_dev_security(Nwkaddr, buff, b_len);
 	printf("respond>>over!\n");
-
+	return JSON_OK;
 }
 //////////////
 static void upload_sensor_change_respond(char *addr, int num, int text_len)
@@ -509,7 +600,7 @@ uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket)
     uint8 termlen=0;
     uint8 tmp_code[TERM_LEN]={0};
     //uint8 termcode[TERM_LEN]={0};
-    uint8 EnergyNodeID[NODE_LEN]={0};
+//    uint8 EnergyNodeID[NODE_LEN]={0};
     uint8 node_num=0;
     uint8 term_num=0;
 	printf("text=%s\n",text);
@@ -675,6 +766,12 @@ int detach_interface_msg_client(char *text,int textlen)
 		printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
 		return DETACH_PRASE_ERROR;//need to return immediately 空指针需立即返回
 	}
+	if(cJSON_GetObjectItem(root, "MsgType") == NULL)
+	{
+		printf("msgtype error!\n");
+		cJSON_Delete(root);
+		return DETACH_PRASE_ERROR;
+	}
 	msgtype = cJSON_GetObjectItem(root, "MsgType")->valueint;
 	if((msgtype>= 0x10)&&(msgtype<0x70))
 	{
@@ -703,21 +800,20 @@ int client_msg_handle_security(char *buff, int size, int fd)
 	int cfd = fd;
 	cJSON *sroot;
 	char *sout;
+	int ret;
 
 	root=cJSON_Parse(buff);
 	if(root)
 	{
 		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
-		normalTransaction[MsgType-112](root, cfd);  //handle message normal
+		ret = normalTransaction[MsgType-112](root, cfd);  //handle message normal
 		//respond: when normal set,not request
-		if(	(MsgType == SECURITY_SWITCH_CONTROL_MSG)
-			//(MsgType == SECURITY_SET_GLOBAL_OPERATOR_MSG)||
-			//(MsgType == SECURITY_SET_DEV_OPERATOR_MSG)
-															)
+		if((ret != JSON_OK))
 		{
 			sroot=cJSON_CreateObject();
 			cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
 			cJSON_AddNumberToObject(sroot,"Sn",				10);
+			cJSON_AddNumberToObject(sroot,"respond_status",				ret);
 			sout=cJSON_Print(sroot);
 			send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
 			cJSON_Delete(sroot);
@@ -725,7 +821,7 @@ int client_msg_handle_security(char *buff, int size, int fd)
 		}
 	}
     cJSON_Delete(root);
-    return 0;
+    return ret;
 }
 int client_msg_handle_in_common(char *buff, int size, int fd)
 {
@@ -755,6 +851,20 @@ int client_msg_handle_in_common(char *buff, int size, int fd)
 		cJSON_Delete(root);
 	}
     return 0;
+}
+void rec_json_error_respond(char type, int ret, int fd)
+{
+	char *sout;
+	cJSON *sroot;
+
+	sroot=cJSON_CreateObject();
+	cJSON_AddNumberToObject(sroot,"MsgType",		type+0x10);
+	cJSON_AddNumberToObject(sroot,"Sn",				10);
+	cJSON_AddNumberToObject(sroot,"respond_status",				ret);
+	sout=cJSON_Print(sroot);
+	send_msg_to_client(sout,strlen(sout),fd);  //tcp send respond
+	cJSON_Delete(sroot);
+	free(sout);
 }
 void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket)
 {

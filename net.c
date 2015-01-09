@@ -41,7 +41,6 @@
 
 
 
-
 extern int MsgtermTxId; //���ͳ������ݵ���Ϣ����
 //extern int MsgtermRxId; //���ܳ������ݵ���Ϣ����
 extern int MsgserverTxId;//���ͷ��������ݵ���Ϣ����
@@ -658,7 +657,7 @@ void *handle_request(void *argv)
 								//printf("buff[0]=%d,buff[n-1]=%d \n",buff[0],buff[n-1]);
 								//printf("sever recieve data:%s \n", buff);
 //									memcpy(client_list[i].client_buff,buff,n);
-//								    printf("**client_buff=%s ****\r\n",client_list[i].client_buff);
+							   // printf("**client_buff=%s ****\r\n",buff);
 //									client_list[i].client_buff_len=n;
 								__buffType = detach_interface_msg_client(buff, n);//detach interface
 								switch(__buffType)
@@ -692,12 +691,14 @@ void *handle_request(void *argv)
 							}
 							else if(n==0)
 							{
+								printf("socket%d disconneted!\n",connect_host[i]);
 								connect_host[i] = -1;
 								client_num --;
 								close(connect_host[i]);
 							}
 							else if(n==-1)
 							{
+								printf("socket%d disconneted!\n",connect_host[i]);
 								connect_host[i] = -1;
 								client_num--;
 								close(connect_host[i]);
