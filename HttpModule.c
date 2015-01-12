@@ -31,6 +31,33 @@
 
 //char localIp[20]="192.168.1.112";
 
+void http_ctrl_iasWarningDeviceOperation(char *ieee)
+{
+	int rc;
+	char url_str[MAXBUF];
+	char result_str[MAXBUF] = {0};
+
+	sprintf(url_str,"http://%s/cgi-bin/rest/network/iasWarningDeviceOperation.cgi?"
+			"ep=01&ieee=%s&param1=3&param2=0&param3=0&operatortype=1&callback=1234"
+			"&encodemethod=NONE&sign=AAA",local_addr,ieee);
+//	printf("bao jing :%s\n",url_str);
+//	exit(1);
+	rc = curl_global_init(CURL_GLOBAL_ALL);
+	if (rc != CURLE_OK)
+	{
+		//printf("child curl_global_init error %ld\n", (uint32)getpid());
+		printf("child curl_global_init error\n");
+		exit(1);
+	}
+
+
+	rc = child_perform_http_request(url_str,result_str);
+	if(rc!=0)
+	{
+        printf("child curl_set error rt=%d\n",rc);
+	}
+	curl_global_cleanup();
+}
 
 void child_doit(uint8 *curl,uint8 curlen,uint8 *nodeid)
 {
@@ -42,18 +69,18 @@ void child_doit(uint8 *curl,uint8 curlen,uint8 *nodeid)
 
 	for (i=0;i<curlen;i++)
 	sprintf(buffer+i*2,"%02X",curl[i]);
-	printf("[%s]\n",buffer);
+	//printf("[%s]\n",buffer);
 
 
     //sprintf(url_str,"http://%s/cgi-bin/rest/network/ZBSendRawMessageToComPort.cgi?ep=0A&nwk_addr=%s&data=%s&callback=1234&encodemethod=NONE&sign=AAA",GATEWAY_IPADDR,nodeid,buffer);
 	sprintf(url_str,"http://%s/cgi-bin/rest/network/ZBSendRawMessageToComPort.cgi?ep=0A&nwk_addr=%s&data=%s&callback=1234&encodemethod=NONE&sign=AAA",local_addr,nodeid,buffer);//modify by yan150112
-	DBG_PRINT("url_str=%s\n",url_str);
+	//DBG_PRINT("url_str=%s\n",url_str);
 	// global libcURL init	
 	rc = curl_global_init( CURL_GLOBAL_ALL );
 	if (rc != CURLE_OK) 
 	{
-		printf("child curl_global_init error %ld\n", (uint32)getpid());
-		//printf("child curl_global_init error\n");
+		//printf("child curl_global_init error %ld\n", (uint32)getpid());
+		printf("child curl_global_init error\n");
 		exit (1);
 	}	
 
@@ -64,7 +91,7 @@ void child_doit(uint8 *curl,uint8 curlen,uint8 *nodeid)
         printf("child curl_set error rt=%d\n",rt);
 	}
 	
-	DBG_PRINT("result_str=%s\n",result_str);
+	//DBG_PRINT("result_str=%s\n",result_str);
 	
 	curl_global_cleanup();
 

@@ -14,7 +14,7 @@ void child_doit(uint8 *curl,uint8 curlen,uint8 *nodeid);
 int child_response(uint16 status, uint8 *result_str, uint8 *response_str);
 size_t write_function( char *ptr, size_t size, size_t nmemb, void *userdata);
 
-
+extern void http_ctrl_iasWarningDeviceOperation(char *ieee);//add yan150112
 
 
 
