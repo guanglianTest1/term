@@ -11,7 +11,7 @@
 
 /********************************************************************************/   //net config
 #define CLIENT_PORT    					5030
-#define NODE_PORT      					5002
+#define NODE_PORT      					5018
 #define SERVER_PORT    					5040
 //#define GATEWAY_IPADDR   				"192.168.0.102"
 //#define SERVER_IPADDR  				"192.168.0.100"
@@ -22,12 +22,10 @@
 /********************************************************************************/   //sqlite config
 #define	DATABASE_PATH					"/mnt/nfs/node.db"  //数据库存放路径
 #define GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
-
-
 /********************************************************************************/
 //respond_status:-5>>json key error,-6>>json value error
 
 
-
+extern char local_addr[1025];  //gateway ipaddr
 
 #endif /* USER_CONFIG_H_ */
