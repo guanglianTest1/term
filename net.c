@@ -30,6 +30,9 @@
 #include <signal.h>
 #include <time.h>
 
+#include <ifaddrs.h>  //add yan150112
+
+
 #include"json.h"
 #include"cJSON.h"
 #include"net.h"
@@ -52,12 +55,10 @@ extern uint8 term_rcv_flag;
 extern uint8 client_send_count;
 extern uint8 server_heart_flag;
 extern uint8 node_heart_flag;
+/****************************************************************************/
 uint8 Client_Sn=0;
 int Client_Socket=0;
 uint8 listen_thread_isover=0;
-
-
-
 #if 0
 node_list node_table[NODE_NUM]={
 		                        {"1234567890","ce75",{{{0x00,0x00,0x00,0x11,0x25,0x52},1,"was",60,0,0,0,0,0,0,0,0},{{0x00,0x00,0x12,0x34,0x56,0x78},2,"water",60,0,0,0,0,0,0,0,0},{{0xaa,0x12,0x34,0x56,0x78,0x90},3,"water",60,0,0,0,0,0,0,0,0}}},
@@ -68,10 +69,10 @@ uint8 Term_Num[NODE_NUM]={3,3};
 
 #if 1
 node_list node_table[NODE_NUM]={0};
-
 uint8 Term_Num[NODE_NUM]={0};
 #endif
-
+char local_addr[1025];//add yan150112
+/**********************************************************************************************/
 pthread_t thread_do[2];  //pthread id
 //int handle_connect(int sockfd);
 //int handle_request();
@@ -290,7 +291,36 @@ int ConnectClient()
     listen(s_s, 5);
     return s_s;
 }
-
+/*
+ *get ipaddr by funtionc: getifaddrs and "eth0"
+ * */
+void get_local_ipaddr()
+{
+    struct ifaddrs *ifaddr, *ifa;
+    int s;
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return ;
+    }
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+        if(memcmp(ifa->ifa_name, "eth0",4) !=0)
+        	continue;
+		s = getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),
+				local_addr, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+		if (s != 0) {
+			//printf("getnameinfo() failed: %s\n", gai_strerror(s));
+		}
+		else
+		{
+			printf("address:%s\n", local_addr);
+			break;
+		}
+    }
+    freeifaddrs(ifaddr);
+}
+//
 void node_msg_process()
 {
 	pthread_t node_thread;
@@ -405,7 +435,7 @@ int connect_to_gateway_init(void)
 	}
 	bzero(&s_add,sizeof(struct sockaddr_in));
 	s_add.sin_family=AF_INET;
-	s_add.sin_addr.s_addr= inet_addr(GATEWAY_IPADDR);
+	s_add.sin_addr.s_addr= inet_addr(local_addr);//modify by yan
 	s_add.sin_port=htons(NODE_PORT);
 	if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )
 	{
@@ -457,7 +487,7 @@ int nodeSocket() //modify141230
 		}
 		else if(recbytes>0)
 		{
-			//printf("gateway socket receive:%s\r=\n",buffer);
+			printf("receive 5002 size:%d \n",recbytes);
 			detach_obj = detach_5002_message22(buffer,recbytes);
 			//printf("5002message22:%d\n",detach_obj);
 			//detach_obj = DETACH_BELONG_SECURITY;

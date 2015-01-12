@@ -187,6 +187,7 @@ extern int connect_host[MAX_CLIENT_NUM];
 
 //void ConnectClient();
 extern int ConnectClient();
+extern void get_local_ipaddr();//add yan150112
 //extern void *client_msg_thread(void *p);
 extern void *client_type_thread(void *p);
 

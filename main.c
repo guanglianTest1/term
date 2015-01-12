@@ -39,7 +39,9 @@ int main()
 	db_init();
 	sysInit();
 	
+	get_local_ipaddr();//get gateway ip addr
 	s_s= ConnectClient();
+
 
 //	pthread_create(&threadtest,NULL,thread_test,NULL);
 
@@ -67,7 +69,7 @@ int main()
 //	pthread_create(&term_thread,NULL,term_msg_thread,NULL);       //���ͳ�����Ϣ�߳�
 
 
-	pthread_create(&node_thread,NULL,node_msg_thread,NULL);       //与网关5018建立连接，获取callback,客户端形式
+	pthread_create(&node_thread,NULL,node_msg_thread,NULL);       //与网关5002建立连接，获取callback,客户端形式
 
 
 //	pthread_create(&server_thread,NULL,server_msg_thread,NULL);   //���������ͨ���߳�
