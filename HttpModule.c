@@ -45,8 +45,9 @@ void child_doit(uint8 *curl,uint8 curlen,uint8 *nodeid)
 	printf("[%s]\n",buffer);
 
 
-    sprintf(url_str,"http://%s/cgi-bin/rest/network/ZBSendRawMessageToComPort.cgi?ep=0A&nwk_addr=%s&data=%s&callback=1234&encodemethod=NONE&sign=AAA",GATEWAY_IPADDR,nodeid,buffer);
-    DBG_PRINT("url_str=%s\n",url_str);
+    //sprintf(url_str,"http://%s/cgi-bin/rest/network/ZBSendRawMessageToComPort.cgi?ep=0A&nwk_addr=%s&data=%s&callback=1234&encodemethod=NONE&sign=AAA",GATEWAY_IPADDR,nodeid,buffer);
+	sprintf(url_str,"http://%s/cgi-bin/rest/network/ZBSendRawMessageToComPort.cgi?ep=0A&nwk_addr=%s&data=%s&callback=1234&encodemethod=NONE&sign=AAA",local_addr,nodeid,buffer);//modify by yan150112
+	DBG_PRINT("url_str=%s\n",url_str);
 	// global libcURL init	
 	rc = curl_global_init( CURL_GLOBAL_ALL );
 	if (rc != CURLE_OK) 
