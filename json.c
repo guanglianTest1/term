@@ -107,7 +107,7 @@ static int msghandle_set_global_opt(cJSON *root, int fd)
 	respond  = cJSON_CreateObject();
 	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
 	cJSON_AddNumberToObject(respond, "Sn", 10);
-	cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
+	//cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
 	out = cJSON_PrintUnformatted(respond);
 	send_msg_to_client(out, strlen(out),fd);
 	free(out);
@@ -160,7 +160,7 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 	respond  = cJSON_CreateObject();
 	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_DEV_OPERATOR_MSG_RES);
 	cJSON_AddNumberToObject(respond, "Sn", 10);
-	cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
+	//cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
 	out = cJSON_PrintUnformatted(respond);
 	send_msg_to_client(out, strlen(out),fd);
 	free(out);
@@ -549,7 +549,7 @@ static int msghandle_switch_state_ctrl(cJSON *root, int fd)
 	respond  = cJSON_CreateObject();
 	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
 	cJSON_AddNumberToObject(respond, "Sn", 10);
-	cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
+	//cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
 	out = cJSON_PrintUnformatted(respond);
 	send_msg_to_client(out, strlen(out),fd);
 	free(out);
@@ -812,8 +812,8 @@ int client_msg_handle_security(char *buff, int size, int fd)
 		{
 			sroot=cJSON_CreateObject();
 			cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
-			cJSON_AddNumberToObject(sroot,"Sn",				10);
-			cJSON_AddNumberToObject(sroot,"respond_status",				ret);
+			cJSON_AddNumberToObject(sroot,"Sn",				ret);
+			//cJSON_AddNumberToObject(sroot,"respond_status",				ret);
 			sout=cJSON_Print(sroot);
 			send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
 			cJSON_Delete(sroot);
@@ -860,7 +860,7 @@ void rec_json_error_respond(char type, int ret, int fd)
 	sroot=cJSON_CreateObject();
 	cJSON_AddNumberToObject(sroot,"MsgType",		type+0x10);
 	cJSON_AddNumberToObject(sroot,"Sn",				10);
-	cJSON_AddNumberToObject(sroot,"respond_status",				ret);
+	//cJSON_AddNumberToObject(sroot,"respond_status",				ret);
 	sout=cJSON_Print(sroot);
 	send_msg_to_client(sout,strlen(sout),fd);  //tcp send respond
 	cJSON_Delete(sroot);
@@ -1406,6 +1406,11 @@ int parse_json_node_security(char *text,int textlen)
 						if(qopr!=NULL)
 						{
 							printf("format correct>>");
+
+							if(sensorstatus == SENSOR_STATUS_ALARM)
+							{//控制报警器
+								http_ctrl_iasWarningDeviceOperation(WARNING_DEVICE_IEEE);
+							}
 							cJSON_AddNumberToObject(sroot,"MsgType",				118);
 							cJSON_AddNumberToObject(sroot,"Sn",						10);
 							cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);

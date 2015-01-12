@@ -24,6 +24,10 @@
 #define GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
 /********************************************************************************/
 //respond_status:-5>>json key error,-6>>json value error
+/********************************************************************************/    //报警器ieee
+#define	WARNING_DEVICE_IEEE				"00137A0000017056"
+
+
 
 
 extern char local_addr[1025];  //gateway ipaddr

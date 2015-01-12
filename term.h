@@ -49,7 +49,13 @@
 
 #define CLOSE_WATER_VALVE			0x06/*水表关阀请示帧*/
 #define CLOSE_LBWATER_REQMSG		0xC521/*关闭郎贝水表请求*/
+/******************************************************************************************************/
+//define security serial protocol
+#define	SENSOR_STATUS_ALARM						1
+#define SENSOR_STATUS_NORMAL					2
 
+
+/******************************************************************************************************/
 typedef struct{
 	uint8 frmhead[3];/*固定填写FE FE FE*/
 	uint8 frmStar;/*固定填写0x68*/
@@ -172,7 +178,7 @@ typedef struct{
 	uint8 smdata;/*小数部分*/
 	uint8 bigdata[3];/*整数部分*/
 }GetAmmereValRes_T;
-
+/******************************************************************************************************/
 #define HEXBCDTODEC(c)					(((c)>>4)*10+((c)&0x0F))
 
 #define DEV_TYPE_AMMETER				1/*电表*/
@@ -225,7 +231,7 @@ union test {
         uint32 a;
         uint8 b[4];
 } test;
-
+/******************************************************************************************************/
 //void  SendmsgToclient(TxMsg Tmp_TxMsg);
 void  SendmsgToclient(TxMsg TmpBuf);
 
