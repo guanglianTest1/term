@@ -250,7 +250,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 	//配置更新到数据库
 	//opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
 	NodeList_array = cJSON_GetObjectItem (_root, "NodeList");
-	//sqlite_updata_global_operator(opt);//handle dababase for global operator   //屏蔽全局布防
+	sqlite_updata_global_operator(opt);//handle dababase for global operator
 	if(NodeList_array)
 	{
 		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
@@ -1318,7 +1318,7 @@ int parse_json_node_security(char *text,int textlen)
 
 	int msgtype;
     char *IEEE=NULL;
-    char *Nwkaddr=NULL;
+	char *Nwkaddr=NULL;
     char *data =NULL;
 	int databuf_len;
 	char switchnum,switchstatus,sensornum,sensorstatus;
