@@ -53,7 +53,20 @@
 //define security serial protocol
 #define	SENSOR_STATUS_ALARM						1
 #define SENSOR_STATUS_NORMAL					2
+#define	SENSOR_DEV_MAX_IN_ONE_NODE				5
 
+#define SWITCH_STATUS_OPENED					1
+#define SWITCH_STATUS_CLOSED					2
+#define SWITCH_STATUS_INVERT					3
+#define SWITCH_STATUS_MAX						4
+#define	SWITCH_DEV_MAX_IN_ONE_NODE				4
+
+#define	OPERATER_OPEN							1    //布防
+#define OPERATER_CLOSE							2    //撤防
+#define OPERATER_MAX							3
+
+
+#define SECURITY_SERIAL_RESPOND_STATUS_SUCCESS	0
 
 /******************************************************************************************************/
 typedef struct{

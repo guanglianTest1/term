@@ -21,13 +21,14 @@
 
 /********************************************************************************/   //sqlite config
 #define	DATABASE_PATH					"/mnt/nfs/node.db"  //数据库存放路径
-#define GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
+
 /********************************************************************************/
 //respond_status:-5>>json key error,-6>>json value error
-/********************************************************************************/    //报警器ieee
-#define	WARNING_DEVICE_IEEE				"00137A0000017056"
-
-
+/********************************************************************************/
+#define	WARNING_DEVICE_IEEE				"00137A0000017056"	//报警器ieee
+#define GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
+#define WARNING_TIME					"30"    //报警时间
+#define WARNING_TYPE					"1"		//报警类型: 1盗窃，2火警，3紧急情况||突发事件,4门铃，5设备故障
 
 
 extern char local_addr[1025];  //gateway ipaddr

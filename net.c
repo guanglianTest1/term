@@ -699,10 +699,7 @@ void *handle_request(void *argv)
 										printf("received client message,but prase json error\n");
 										break;
 									case  DETACH_MSGTYPE_ERROR:
-										memcpy(respondBUff,"data format error:", 18);
-										memcpy(respondBUff+18,buff, n);
-										send(connect_host[i],respondBUff, n+18, 0);
-										printf("received client message,but msgtype error \n");
+										client_msg_handle_in_msgtype_error(buff, n, connect_host[i]);
 										break;
 /*这个case处理节能的客户端信息*/			case  DETACH_BELONG_ENERGY:
 										//parse_json_client(buff, n, connect_host[i]);

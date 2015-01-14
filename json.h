@@ -40,6 +40,7 @@
 #define JSON_OK								0
 #define JSON_KEY_ERROR						-5
 #define JSON_VALUE_ERROR					-6
+#define JSON_MSGTYPE_ERROR					-4
 
 
 #define MALLOC_ERROR						1
@@ -59,5 +60,5 @@ extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
 extern int client_msg_handle_security(char *buff, int size, int fd);
 extern int client_msg_handle_in_common(char *buff, int size, int fd);
 extern int detach_5002_message22(char *text, int textlen);
-extern void rec_json_error_respond(char type, int ret, int fd);
+extern void client_msg_handle_in_msgtype_error(char *buff, int size, int fd);
 #endif

@@ -38,8 +38,8 @@ void http_ctrl_iasWarningDeviceOperation(char *ieee)
 	char result_str[MAXBUF] = {0};
 
 	sprintf(url_str,"http://%s/cgi-bin/rest/network/iasWarningDeviceOperation.cgi?"
-			"ep=01&ieee=%s&param1=3&param2=0&param3=0&operatortype=1&callback=1234"
-			"&encodemethod=NONE&sign=AAA",local_addr,ieee);
+			"ep=01&ieee=%s&param1=%s&param2=0&param3=0&operatortype=%s&callback=1234"
+			"&encodemethod=NONE&sign=AAA",local_addr,ieee,WARNING_TIME,WARNING_TYPE);
 //	printf("bao jing :%s\n",url_str);
 //	exit(1);
 	rc = curl_global_init(CURL_GLOBAL_ALL);
