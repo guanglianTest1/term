@@ -17,6 +17,7 @@
 //#define SERVER_IPADDR  				"192.168.0.100"
 #define GATEWAY_IPADDR   				"192.168.1.137"
 #define SERVER_IPADDR  					"192.168.1.111"
+#define SERVER_IPADDR_DEBUG				"192.168.1.196"
 #define MAX_CLIENT_NUM 					32
 
 /********************************************************************************/   //sqlite config
