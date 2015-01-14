@@ -188,7 +188,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 	cJSON *SubNode_array, *SubNode_item;	int subnode_cnt;
 	char *SecurityNodeID;
 	char *Nwkaddr;
-	char opt;
+//	char opt;
 	int i,j;
 	//
 	subsecurityConfig_t *subnod;
@@ -262,6 +262,8 @@ static int msghandle_security_config(cJSON *root, int fd)
 		    {
 		    	SecurityNodeID = cJSON_GetObjectItem(NodeList_item,"SecurityNodeID")->valuestring;
 		    	Nwkaddr = cJSON_GetObjectItem(NodeList_item,"Nwkaddr")->valuestring;
+		    	//下发任意透传消息给透传节点触发透传节点能上传透传消息
+		    	send_data_to_dev_security(Nwkaddr, "wake up", 8);//add yanly150114
 		    	//printf("ieee:%s,addr:%s\n",SecurityNodeID,Nwkaddr);
 		    	SubNode_array = cJSON_GetObjectItem (NodeList_item, "SubNode");
 		    	subnode_cnt = cJSON_GetArraySize (SubNode_array ); //获取数组的大小
@@ -1292,8 +1294,16 @@ int detach_5002_message22(char *text, int textlen)
 	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
 	if(msgtype != TERM_MSGTYPE)
 	{
+		if(msgtype == ANNCE_CALLBACK)
+		{
+			ret = ANNCE_CALLBACK;
+		}
+		else
+		{
+			ret = DETACH_MSGTYPE_ERROR;
+		}
 		cJSON_Delete(root);
-		return (ret = DETACH_MSGTYPE_ERROR);
+		return ret;
 	}
 	printf("recevie 5002 callback message 22 >>");
 	ieee =cJSON_GetObjectItem(root, "IEEE")->valuestring;
@@ -1323,6 +1333,9 @@ int detach_5002_message22(char *text, int textlen)
 	sqlite_free_query_result(data);
 	return ret;
 }
+/*
+ * security node callback handle
+ * */
 int parse_json_node_security(char *text,int textlen)
 {
 	cJSON *root ;
@@ -1533,7 +1546,54 @@ int parse_json_node_security(char *text,int textlen)
 	}
 	return 1;
 }
+/*
+ * 设备节点重新上电产生的callback处理,如果在配置表内唤醒该节点
+ * */
+void annce_callback_handle(char *text,int textlen)
+{
+	cJSON *root ;
+	char *ieee;
+	root=cJSON_Parse(text);
+	if (!root)
+		return;
+	if(cJSON_GetObjectItem(root, "IEEE") == NULL)
+		return;
+	ieee = cJSON_GetObjectItem(root, "IEEE")->valuestring;
+	//查询ieee的nwkaddr
+	char sql[126];
+	char **data;
+	int row,col;
+	sprintf(sql,"select distinct nwkaddr from stable where ieee = '%s'",ieee);
+	data = sqlite_query_msg(&row, &col, sql);
+	if(data!= NULL)
+	{
+		send_data_to_dev_security(data[col], "wake up",8);
+		printf("nwkaddr:%s\n",data[col]);
 
+	}
+	sqlite_free_query_result(data);
+}
+/*
+ * 解析服务器回应的消息，打印消息类型
+ * add by yan150114
+ * */
+int parse_received_server_msg(char *text)
+{
+	cJSON *root;
+	int msgtype;
+    root=cJSON_Parse(text);
+	if (!root)
+    {
+	 	return JSON_PARSE_FAILED;
+    }
+	if(cJSON_GetObjectItem(root,"MsgType") ==NULL)
+		return JSON_KEY_ERROR;
+	msgtype=cJSON_GetObjectItem(root,"MsgType")->valueint;
+	printf("received server MsgType:%d\n",msgtype);
+	cJSON_Delete(root);
+	return 1;
+}
+/*********************************************************/
 void parse_json_server(char *text,uint8 textlen)
 {
 	 cJSON* root = NULL;

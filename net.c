@@ -76,13 +76,13 @@ char local_addr[1025];//add yan150112
 pthread_t thread_do[2];  //pthread id
 //int handle_connect(int sockfd);
 //int handle_request();
+//static function
 void *handle_connect(void *argv);
 void *handle_request(void *argv);
 void sig_process(int signo);
 void sig_pipe(int signo);
-/****************************************************************************/ //add yanly141229
-int	connect_to_gateway_init(void);
-
+static int	connect_to_gateway_init(void);//add yanly141229
+static int send_server_heartbeat(int fd);
 
 
 //uint8 node_ip[20]="192.168.0.102";
@@ -422,7 +422,11 @@ void *server_msg_thread(void *p)
 //		return 0;
 //
 //}
-int connect_to_gateway_init(void)
+
+/*
+ * connect gateway 5018 init
+ * */
+static int connect_to_gateway_init(void)
 {
 	int cfd=0;
 	struct sockaddr_in s_add;
@@ -445,6 +449,35 @@ int connect_to_gateway_init(void)
 	printf("connected gateway socket success\n");
 	return cfd;
 }
+/*
+ * connect server 5040 init
+ * */
+int connect_to_server_init(void)
+{
+	int cfd=0;
+	struct sockaddr_in s_add;
+	uint8 rc=0;
+	cfd = socket(AF_INET, SOCK_STREAM, 0);
+	if(cfd == -1 )
+	{
+		printf("connect to server socket setup fail ! \r\n");
+		return -1;
+	}
+	bzero(&s_add,sizeof(struct sockaddr_in));
+	s_add.sin_family=AF_INET;
+	s_add.sin_addr.s_addr= inet_addr(SERVER_IPADDR_DEBUG);//debug by yan
+	s_add.sin_port=htons(SERVER_PORT);
+	if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )
+	{
+		printf("server connect fail !\r\n");
+		return -1;
+	}
+	printf("connected server socket success\n");
+	return cfd;
+}
+/*
+ * 处理5018callback的单元
+ * */
 int nodeSocket() //modify141230
 {
 	uint8 msg[20] = "0200070007";
@@ -501,6 +534,9 @@ int nodeSocket() //modify141230
 					printf("security>>");
 					parse_json_node_security(buffer,recbytes);
 					break;
+				case  ANNCE_CALLBACK:
+					annce_callback_handle(buffer, recbytes); //设备节点重新上电产生的callback处理
+					break;
 				default :
 					break;
 			}
@@ -517,12 +553,96 @@ int nodeSocket() //modify141230
 	//close(cfd);
 	return 0;
 }
+/***************************************************************************************/
+/*
+ * 处理服务器业务的单元
+ * 采用轮询方式：执行发送心跳包>>发送消息队列数据>>接收服务器发过来的消息,不阻塞
+ * */
+int ServerSocket() //modify141230
+{
+	int cfd;
+	char buffer[1024];
+	int recbytes;
+	int s_status;
+	int ret;
+	cfd = connect_to_server_init();
+	memset(buffer,0,MAXBUF);
+	while(cfd)// connected
+	{
+//心跳
+		if(server_heart_flag == enable)
+		{
+			server_heart_flag = disable;
+			s_status = send_server_heartbeat(cfd);
+			if(s_status ==-1)
+			{
+				perror("connected server 5040,but send error\n");
+				close(cfd);
+				return -1;
+			}
+			else if(s_status ==0)
+			{
+				printf("connected server 5040,but the other side close this socket\n");
+				close(cfd);
+				return -2;
+			}
+			else
+			{}//normal send
+		}
+//发送消息队列
+//接收server msg
+		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);     //���ӳɹ�,�ӷ���˽����ַ�
+		if((recbytes==-1)&&(errno!=EAGAIN))
+		{
+			//printf("recbytes:%d\n",recbytes);
+			perror("socket read server data fail");
+			close(cfd);
+			return -1;
+		}
+		else if(recbytes>0)
+		{
+			printf("receive server 5040 size:%d \n",recbytes);
+			if((ret=parse_received_server_msg(buffer))<0)
+			{
+				printf("server msg format error:%d\n",ret);
+			}
+			memset(buffer,0,MAXBUF);
+		}
+		else if(recbytes==0)
+		{
+			printf("connected server 5040,but the other side close this socket\n");
+			close(cfd);
+			return -2;
+		}
 
+	}
+	//close(cfd);
+	return 0;
+}
+/*
+ * send server heartbeat
+ * */
+static int send_server_heartbeat(int fd)
+{
+	cJSON* root;
+	char *out;
+	int ret;
+
+	root=cJSON_CreateObject();
+    cJSON_AddNumberToObject(root,"MsgType", 64);
+    cJSON_AddNumberToObject(root,"Sn",		10);
+    out = cJSON_Print(root);
+    ret = send(fd,out,strlen(out),MSG_DONTWAIT);
+    cJSON_Delete(root);
+    free(out);
+    return ret;
+}
+/***************************************************************************************/
 uint8 ServerHeart_sn=0;
-
+#if 0
 int ServerSocket()
     {
-        uint8 msg[20] = "0200070007";
+//        uint8 msg[20] = "0200070007";
 		//int bytes_sent=0;
 		int cfd=0;                                           //�ļ�������
 		int recbytes=0;
@@ -609,7 +729,7 @@ int ServerSocket()
 		//close(cfd);
 		return 0;
 }
-
+#endif
 
 //int handle_connect(int sockfd)
 void *handle_connect(void *argv)

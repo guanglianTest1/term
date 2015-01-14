@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include<sys/socket.h>
 #include<netinet/in.h>
+#include <pthread.h>
 
 #include"json.h"
 #include"cJSON.h"

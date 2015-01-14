@@ -31,6 +31,10 @@ pthread_t thread_do[2];
 //	printf("haha\n");
 //	return NULL;
 //}
+void wake_up_zb_serial_node();
+
+
+
 int main()
 {
 	int i;
@@ -38,9 +42,9 @@ int main()
 
 	db_init();
 	sysInit();
-	
 	get_local_ipaddr();//get gateway ip addr
 	s_s= ConnectClient();
+	wake_up_zb_serial_node();//唤醒透传节点 add by yan150114
 
 
 //	pthread_create(&threadtest,NULL,thread_test,NULL);
@@ -86,10 +90,30 @@ int main()
     //wait pthread over
     for(i=0; i<2; i++)
     	pthread_join(thread_do[i], NULL);
+    pthread_join(node_thread, NULL);
+    pthread_join(time_thread, NULL);
 
     close(s_s);
     return 0;
 }
 
+void wake_up_zb_serial_node()
+{
+	char sql[] = "select distinct nwkaddr from stable where nwkaddr not null";
+	char **data;
+	int row,col;
+	int i,index;
+	data = sqlite_query_msg(&row, &col, sql);
 
+	if(data!= NULL)
+	{
+		for(i=0; i<row; i++)
+		{
+			index = i*col+col;
+			send_data_to_dev_security(data[index], "wake up",8);
+			printf("nwkaddr:%s\n",data[index]);
+		}
+	}
+	sqlite_free_query_result(data);
+}
 
