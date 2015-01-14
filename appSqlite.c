@@ -24,6 +24,10 @@ sqlite3* node_db = NULL;
 //    //printf("\n");
 //    return 0;
 //}
+
+/*
+ *insert security configuration in stable
+ * */
 void sqlite_insert_security_config_table(char *ieee, char *addr, subsecurityConfig_t *data, int icnt)
 {
 	int i;
@@ -57,6 +61,9 @@ void sqlite_insert_security_config_table(char *ieee, char *addr, subsecurityConf
     }
     sqlite3_free(errmsg);
 }
+/*
+ * updata global operator in stable
+ * */
 void sqlite_updata_global_operator(char op)
 {
 	int ret;
@@ -72,6 +79,9 @@ void sqlite_updata_global_operator(char op)
 	}
 	sqlite3_free(errmsg);
 }
+/*
+ * updata msg in node.db
+ * */
 void sqlite_updata_msg(char *sql)
 {
 	int ret;
@@ -83,6 +93,9 @@ void sqlite_updata_msg(char *sql)
 	}
 	sqlite3_free(errmsg);
 }
+/*
+ * node.db initialization
+ * */
 int db_init()
 {
     if (SQLITE_OK != sqlite3_open(DATABASE_PATH, &node_db)){//打开数据库
@@ -94,6 +107,9 @@ int db_init()
     	printf("open node.db \n");
     return 0;
 }
+/*
+ * 查询配置表
+ * */
 char** sqlite_query_msg(int *row, int *col, char *sql)
 {
 	int ret;
@@ -133,6 +149,7 @@ char** sqlite_query_msg(int *row, int *col, char *sql)
     return dbresult;
     //sqlite3_free_table(data);
 }
+/********************************************************************************/
 //char** sqlite_query_ieee(char **data, int *row, int *col)
 //{
 //	int ret;
@@ -163,6 +180,9 @@ char** sqlite_query_msg(int *row, int *col, char *sql)
 //    return dbresult;
 //    //sqlite3_free_table(data);
 //}
+/*
+ * query global operator configuration table
+ * */
 int sqlite_query_global_operator()
 {
 	int ret;
@@ -199,8 +219,13 @@ int sqlite_query_global_operator()
     sqlite3_free_table(data);
     return opt;
 }
+/*
+ * release query result
+ * */
 void sqlite_free_query_result(char **data)
 {
 	sqlite3_free_table(data);
 }
+/*********************************************************************************************/
+
 
