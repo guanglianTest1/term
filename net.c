@@ -430,7 +430,7 @@ static int connect_to_gateway_init(void)
 {
 	int cfd=0;
 	struct sockaddr_in s_add;
-	uint8 rc=0;
+	int rc=-1;
 	cfd = socket(AF_INET, SOCK_STREAM, 0);
 	if(cfd == -1 )
 	{
@@ -441,12 +441,15 @@ static int connect_to_gateway_init(void)
 	s_add.sin_family=AF_INET;
 	s_add.sin_addr.s_addr= inet_addr(local_addr);//modify by yan
 	s_add.sin_port=htons(NODE_PORT);
-	if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )
-	{
-		printf("node connect fail !\r\n");
-		return -1;
-	}
-	printf("connected gateway socket success\n");
+//	do
+//	{
+//		printf("gateway 5018 not connected!\n");
+//		sleep(RECONNECT_GATAWAY5018_TIME);
+		rc = connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr));
+//	}
+//	while(rc ==-1);
+	if(rc !=-1)
+		printf("connected gateway 5018 socket success,socket:%d\n",cfd);
 	return cfd;
 }
 /*
@@ -456,7 +459,7 @@ int connect_to_server_init(void)
 {
 	int cfd=0;
 	struct sockaddr_in s_add;
-	uint8 rc=0;
+	int rc=-1;
 	cfd = socket(AF_INET, SOCK_STREAM, 0);
 	if(cfd == -1 )
 	{
@@ -467,12 +470,15 @@ int connect_to_server_init(void)
 	s_add.sin_family=AF_INET;
 	s_add.sin_addr.s_addr= inet_addr(SERVER_IPADDR_DEBUG);//debug by yan
 	s_add.sin_port=htons(SERVER_PORT);
-	if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )
+	do
 	{
-		printf("server connect fail !\r\n");
-		return -1;
+		printf("server not connected!\n");
+		sleep(RECONNECT_SERVER_TIME);
+		rc = connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr));
 	}
-	printf("connected server socket success\n");
+	while(rc ==-1);
+
+	printf("connected server socket success,socket:%d\n",cfd);
 	return cfd;
 }
 /*
@@ -497,13 +503,13 @@ int nodeSocket() //modify141230
 			s_status = send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
 			if(s_status ==-1)
 			{
-				perror("connected gateway 5002,but send error\n");
+				perror("connected gateway 5018,but send error\n");
 				close(cfd);
 				return -1;
 			}
 			else if(s_status ==0)
 			{
-				printf("connected gateway 5002,but the other side close this socket\n");
+				printf("connected gateway 5018,but the other side close this socket\n");
 				close(cfd);
 				return -2;
 			}
@@ -520,18 +526,16 @@ int nodeSocket() //modify141230
 		}
 		else if(recbytes>0)
 		{
-			printf("receive 5002 size:%d \n",recbytes);
+			printf("receive 5018 size:%d \n",recbytes);
 			detach_obj = detach_5002_message22(buffer,recbytes);
 			//printf("5002message22:%d\n",detach_obj);
 			//detach_obj = DETACH_BELONG_SECURITY;
 			switch(detach_obj)
 			{
 				case  DETACH_BELONG_ENERGY:     /*这个case处理节能的信息*/
-					printf("energy>>");
 					//parse_json_node(buffer,recbytes);
 					break;
 				case  DETACH_BELONG_SECURITY:	/*这个case处理安防的信息*/
-					printf("security>>");
 					parse_json_node_security(buffer,recbytes);
 					break;
 				case  ANNCE_CALLBACK:
@@ -544,7 +548,7 @@ int nodeSocket() //modify141230
 		}
 		else if(recbytes==0)
 		{
-			printf("connected gateway 5002,but the other side close this socket\n");
+			printf("connected gateway 5018,but the other side close this socket\n");
 			close(cfd);
 			return -2;
 		}
@@ -563,35 +567,29 @@ int ServerSocket() //modify141230
 	int cfd;
 	char buffer[1024];
 	int recbytes;
-	int s_status;
 	int ret;
+	int r_msg_num;
+	msgform msg_Rxque;
 	cfd = connect_to_server_init();
 	memset(buffer,0,MAXBUF);
 	while(cfd)// connected
 	{
 //心跳
-		if(server_heart_flag == enable)
+		if(send_server_heartbeat(cfd) <0)
+			return -1;
+//发送接收的消息队列
+		r_msg_num = msgrcv(MsgserverTxId,&msg_Rxque,sizeof(msgform),0,IPC_NOWAIT);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
+		if((r_msg_num ==-1)&&(errno !=ENOMSG))
 		{
-			server_heart_flag = disable;
-			s_status = send_server_heartbeat(cfd);
-			if(s_status ==-1)
-			{
-				perror("connected server 5040,but send error\n");
-				close(cfd);
-				return -1;
-			}
-			else if(s_status ==0)
-			{
-				printf("connected server 5040,but the other side close this socket\n");
-				close(cfd);
-				return -2;
-			}
-			else
-			{}//normal send
+			perror("msgrcv:");
 		}
-//发送消息队列
+		else
+		{
+			//send
+
+		}
 //接收server msg
-		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);     //���ӳɹ�,�ӷ���˽����ַ�
+		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);
 		if((recbytes==-1)&&(errno!=EAGAIN))
 		{
 			//printf("recbytes:%d\n",recbytes);
@@ -626,15 +624,34 @@ static int send_server_heartbeat(int fd)
 {
 	cJSON* root;
 	char *out;
-	int ret;
+	int ret = 1;
 
-	root=cJSON_CreateObject();
-    cJSON_AddNumberToObject(root,"MsgType", 64);
-    cJSON_AddNumberToObject(root,"Sn",		10);
-    out = cJSON_Print(root);
-    ret = send(fd,out,strlen(out),MSG_DONTWAIT);
-    cJSON_Delete(root);
-    free(out);
+	if(server_heart_flag == enable)
+	{
+		server_heart_flag = disable;
+
+		root=cJSON_CreateObject();
+	    cJSON_AddNumberToObject(root,"MsgType", 64);
+	    cJSON_AddNumberToObject(root,"Sn",		10);
+	    out = cJSON_Print(root);
+	    ret = send(fd,out,strlen(out),MSG_DONTWAIT);
+		if(ret ==-1)
+		{
+			perror("connected server 5040,but send error\n");
+			close(fd);
+			return -1;
+		}
+		else if(ret ==0)
+		{
+			printf("connected server 5040,but the other side close this socket\n");
+			close(fd);
+			return -2;
+		}
+		else
+		{}//normal send
+	    cJSON_Delete(root);
+	    free(out);
+	}
     return ret;
 }
 /***************************************************************************************/
@@ -825,7 +842,7 @@ void *handle_request(void *argv)
 										//parse_json_client(buff, n, connect_host[i]);
 										break;
 /*这个case处理安防的客户端信息*/			case  DETACH_BELONG_SECURITY:
-										printf("received client message >>for security >>");
+										//printf("received client message >>for security >>");
 										client_msg_handle_security(buff, n, connect_host[i]);
 										break;
 									case DETACH_BELONG_IN_COMMON:
@@ -951,7 +968,7 @@ void send_msg_to_all_client(char *text, int text_size)
 	{
 		if(client_num<0)
 		{
-			printf("send msg to all client error: no client is connected!>>\n");
+			printf("send msg to all client error: no client is connected!\n");
 			break;
 		}
 		if(connect_host[i] != -1)
@@ -962,9 +979,10 @@ void send_msg_to_all_client(char *text, int text_size)
 				client_num--;
 				close(connect_host[i]);
 			}
-			printf("send msg to all client,this is socket%d>>",connect_host[i]);
+			//printf("send msg to all client,this is socket%d>>",connect_host[i]);
 		}
 	}
+	printf("send msg to all client\n");
 }
 //发送给one客户端
 void send_msg_to_client(char *text, int text_size, int fd)
@@ -983,7 +1001,7 @@ void send_msg_to_client(char *text, int text_size, int fd)
 			}
 		}
 		close(fd);
-		printf("sock%d send error ,may be disconneted>>",fd);
+		printf("sock%d send error ,may be disconneted\n",fd);
 	}
 }
 

@@ -166,7 +166,7 @@ int child_perform_http_request(char *url, char *result)
 			curl_easy_cleanup( ctx );
 			return 9;
 		}
-		DBG_PRINT("result=%s\n",result);
+		//DBG_PRINT("result=%s\n",result);//modify yan
 		curl_easy_cleanup( ctx );
 		return 0;
 }

@@ -89,7 +89,7 @@ static int msghandle_set_global_opt(cJSON *root, int fd)
 	int g_operator;
 	char sql[128];
 
-	printf("set global operator>>");
+	printf("receive client msg: set global operator\n");
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	if(cJSON_GetObjectItem(origin, "OperatorType") == NULL)
 		return JSON_KEY_ERROR;
@@ -123,7 +123,7 @@ static int msghandle_set_global_opt(cJSON *root, int fd)
 
 	//release
 	free(out);
-	printf("over!\n");
+	//printf("over!\n");
 	return	JSON_OK;
 }
 static int msghandle_set_dev_opt(cJSON *root, int fd)
@@ -137,7 +137,7 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 
 	char sql[128];
 
-	printf("set device operator>>");
+	printf("receive client msg: set device operator\n");
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	if((cJSON_GetObjectItem(origin, "OperatorType") == NULL)||
 		(cJSON_GetObjectItem(origin, "SensorNum") == NULL)||
@@ -177,7 +177,7 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 
 	//release
 	free(out);
-	printf("over!\n");
+	//printf("over!\n");
 	return JSON_OK;
 }
 #if 1
@@ -193,7 +193,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 	//
 	subsecurityConfig_t *subnod;
 
-	printf("set security config >> ");
+	printf("receive client msg: set security config\n");
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	{
 //		if((cJSON_GetObjectItem(_root, "GlobalOpt")) == NULL)
@@ -244,7 +244,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(SECURITY_CONFIG_MSG_RES));
 	out = cJSON_PrintUnformatted(_root);
 	send_msg_to_all_client(out, strlen(out));
-	printf("send to all client >> ");
+	//printf("send to all client >> ");
 	//转发给服务器
 	//...wait to do in the feature!
 	free(out);
@@ -304,7 +304,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 		    			printf("%d,",j);
 		    		}
 		    	}
-		    	printf(">>over!\n");
+		    	//printf(">>over!\n");
 		    	//free
 		    	free(subnod);
 		    }
@@ -450,26 +450,26 @@ static int msghandle_security_config_check(cJSON *root, int fd)
 	cJSON *SubNodeItem, *SubNodeArray;
     int opt ;
     char *out=NULL;
-    printf("security config check>>");
+    printf("receive client msg: security config check\n");
 //query database:
     q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
     if(q_data ==NULL)
     {
-    	printf("query db error>>\n");
+    	printf("query db error\n");
     	sqlite_free_query_result(q_data);
     	return JSON_VALUE_ERROR;
     }
     ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
     if(ieee == NULL)
     {
-    	printf("query db error>>\n");
+    	printf("query db error\n");
     	sqlite_free_query_result(ieee);
     	return JSON_VALUE_ERROR;
     }
     opt = sqlite_query_global_operator();
     if(opt ==-1)
     {
-    	printf("query db error>>\n");
+    	printf("query db error\n");
     	return JSON_VALUE_ERROR;
     }
 //organize json package
@@ -505,14 +505,14 @@ static int msghandle_security_config_check(cJSON *root, int fd)
 	out = cJSON_PrintUnformatted(sroot);
 	//printf("out=%s\n",out);
 //send msg to client:
-	printf("send msg to all client>>");
+	//printf("send msg to all client>>");
 	send_msg_to_client(out, strlen(out), fd);
 //free:
 	cJSON_Delete(sroot);
 	free(out);
 	sqlite_free_query_result(q_data);
 	sqlite_free_query_result(ieee);
-	printf("over!\n");
+	//printf("over!\n");
 	return JSON_OK;
 }
 #endif
@@ -533,7 +533,7 @@ static int msghandle_switch_state_ctrl(cJSON *root, int fd)
 	char buff[30] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
 	int b_len;
 
-	printf("control switch>>");
+	printf("receive client msg: control switch\n");
 	//Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	if((cJSON_GetObjectItem(_root,"SecurityNodeID") == NULL)||
@@ -572,7 +572,7 @@ static int msghandle_switch_state_ctrl(cJSON *root, int fd)
 	buff[11] = SwitchStatus;
 	b_len = 12;
 	send_data_to_dev_security(Nwkaddr, buff, b_len);
-	printf("respond>>over!\n");
+	//printf("respond>>over!\n");
 	return JSON_OK;
 }
 //////////////
@@ -581,7 +581,7 @@ static void upload_sensor_change_respond(char *addr, int num, int text_len)
 	char buff[11] ={0x00,0x02,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00};
 	int b_len = 11;
 	buff[10] = num;
-	printf("sensor upload respond>>>>buff:%s\n",buff);
+	printf("sensor upload respond to dev...\n");
 	send_data_to_dev_security(addr, buff, b_len);
 }
 
@@ -1305,7 +1305,7 @@ int detach_5002_message22(char *text, int textlen)
 		cJSON_Delete(root);
 		return ret;
 	}
-	printf("recevie 5002 callback message 22 >>");
+	//printf("recevie 5002 callback message 22 >>");
 	ieee =cJSON_GetObjectItem(root, "IEEE")->valuestring;
 	//printf("ret is %d  %s\n",ret,ieee);
 	sprintf(sql,"SELECT ieee FROM stable where ieee ='%s'",ieee);
@@ -1393,7 +1393,7 @@ int parse_json_node_security(char *text,int textlen)
 				switch (command_num)
 				{
 					case 0x00://传感器上传的
-						printf("upload sensor change >>");
+						printf("callback: upload sensor change\n");
 						sensornum = databuf[databuf_len-2];
 						sensorstatus = databuf[databuf_len-1];
 						//响应给节点
@@ -1431,7 +1431,7 @@ int parse_json_node_security(char *text,int textlen)
 						}
 						if(qopr!=NULL)
 						{
-							printf("format correct>>");
+							//printf("format correct>>");
 
 							if(sensorstatus == SENSOR_STATUS_ALARM)
 							{//控制报警器
@@ -1455,22 +1455,22 @@ int parse_json_node_security(char *text,int textlen)
 							}
 							else
 							{
-								printf("not need upload sensor because sensor change is normal>>");//传感器变成正常no need send
+								printf("not need upload sensor,sensor status is normal\n");//传感器变成正常no need send
 							}
 
 						}
 						else
 						{
-							printf("uneable to upload sensor>>");
+							//printf("uneable to upload sensor>>");
 						}
 						sqlite_free_query_result(qopr);
 						break;
 					case 0x01://控制智能插座的响应
-						printf("respond after the client control switch >>");
+						printf("callback: appliance switch be controled respond, ");
 						cmd_respond_status = databuf[9];
 						if(cmd_respond_status !=SECURITY_SERIAL_RESPOND_STATUS_SUCCESS)
 						{
-							printf("serial data respond status error>>");
+							printf("respond status error\n");
 						}
 						else
 						{
@@ -1535,7 +1535,7 @@ int parse_json_node_security(char *text,int textlen)
 					default:
 						break;
 				}
-				printf("over!\n");
+				//printf("over!\n");
 				cJSON_Delete(sroot);
 				free(databuf);
 				break;

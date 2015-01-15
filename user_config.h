@@ -20,11 +20,17 @@
 #define SERVER_IPADDR_DEBUG				"192.168.1.196"
 #define MAX_CLIENT_NUM 					32
 
+#define RECONNECT_SERVER_TIME			5  //5s
+#define RECONNECT_GATAWAY5018_TIME		5
+
+
 /********************************************************************************/   //sqlite config
 #define	DATABASE_PATH					"/mnt/nfs/node.db"  //数据库存放路径
 
 /********************************************************************************/
-//respond_status:-5>>json key error,-6>>json value error
+
+
+
 /********************************************************************************/
 #define	WARNING_DEVICE_IEEE				"00137A0000017056"	//报警器ieee
 #define GLOBAL_OPERATOR_IN_IEEE_NAME	"global operator"
