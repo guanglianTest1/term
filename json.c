@@ -851,7 +851,7 @@ int client_msg_handle_in_common(char *buff, int size, int fd)
 				cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
 				cJSON_AddNumberToObject(sroot,"Sn",				10);
 				sout=cJSON_Print(sroot);
-
+				set_heart_beat_client(fd);//add yan 150115
 				break;
 			default:break;
 		}

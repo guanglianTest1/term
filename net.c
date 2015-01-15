@@ -55,6 +55,7 @@ extern uint8 term_rcv_flag;
 extern uint8 client_send_count;
 extern uint8 server_heart_flag;
 extern uint8 node_heart_flag;
+extern pthread_mutex_t mutex;
 /****************************************************************************/
 uint8 Client_Sn=0;
 int Client_Socket=0;
@@ -83,11 +84,13 @@ void sig_process(int signo);
 void sig_pipe(int signo);
 static int	connect_to_gateway_init(void);//add yanly141229
 static int send_server_heartbeat(int fd);
-
+static void close_client(int i);
+static void set_heart_beat(int i, char heart_status);
 
 //uint8 node_ip[20]="192.168.0.102";
 client_status client_list[MAX_CLIENT_NUM];
 int connect_host[MAX_CLIENT_NUM];//add yanly141229
+char connect_host_online[MAX_CLIENT_NUM] = {HEARTBEAT_NOT_OK}; //add yan150115增加检测心跳包,规定时间内没收到心跳包断开连接
 uint16 client_num=0;   //how many client socket
 //int connect_number = 0;
 
@@ -747,8 +750,69 @@ int ServerSocket()
 		return 0;
 }
 #endif
+/*
+ * 修改客户端socket的heartbeat值
+ * */
+static void set_heart_beat(int i, char heart_status)
+{
+	pthread_mutex_lock(&mutex);
+	connect_host_online[i] = heart_status;
+	pthread_mutex_unlock(&mutex);
+}
+/*
+ * 收到heartbeat
+ * */
+void set_heart_beat_client(int client_fd)
+{
+	int i;
+	for(i = 0; i<MAX_CLIENT_NUM; i++){
+		if(connect_host[i] == client_fd){
 
-//int handle_connect(int sockfd)
+			set_heart_beat(i, HEARTBEAT_OK);
+		}
+	}
+}
+/*
+ * 检测心跳单元
+ * */
+void *check_client_heartbeat()
+{
+	int i;
+	while(1){
+		if(client_flag == enable){
+			client_flag = disable;
+			for(i=0; i<MAX_CLIENT_NUM; i++)
+			{
+				if(client_num<=0)
+					break;
+				if(connect_host[i] != -1)
+				{
+					if(connect_host_online[i] == HEARTBEAT_NOT_OK){
+						printf("Didn't receive the heartbeat packets within the regulation time:clolse socket%d\n",connect_host[i]);
+						close_client(i);
+					}
+					else{
+						set_heart_beat(i, HEARTBEAT_NOT_OK);
+					}
+				}
+			}
+		}
+	}
+}
+/*
+ * 客户端连接断开，进行关闭操作
+ * */
+static void close_client(int i)
+{
+	close(connect_host[i]);
+	pthread_mutex_lock(&mutex);
+	connect_host[i] =-1;
+	client_num--;
+	pthread_mutex_unlock(&mutex);
+}
+/*
+ * 建立客户端连接单元
+ * */
 void *handle_connect(void *argv)
 {
 	int s_s = *((int *)argv);
@@ -766,6 +830,7 @@ void *handle_connect(void *argv)
 			{
 				connect_host[i] = s_c;
 				client_num ++;
+				set_heart_beat(i, HEARTBEAT_OK);
 				break;
 			}
 		}
@@ -975,9 +1040,10 @@ void send_msg_to_all_client(char *text, int text_size)
 		{
 			if(send(connect_host[i], text, text_size, 0)<=0)
 			{
-				connect_host[i] =-1;
-				client_num--;
-				close(connect_host[i]);
+//				connect_host[i] =-1;
+//				client_num--;
+//				close(connect_host[i]);
+				close_client(i);
 			}
 			//printf("send msg to all client,this is socket%d>>",connect_host[i]);
 		}
@@ -995,12 +1061,13 @@ void send_msg_to_client(char *text, int text_size, int fd)
 		{
 			if(connect_host[i] == fd)
 			{
-				connect_host[i] = -1;
-				client_num --;
+//				connect_host[i] = -1;
+//				client_num --;
+				close_client(i);
 				break;
 			}
 		}
-		close(fd);
+		//close(fd);
 		printf("sock%d send error ,may be disconneted\n",fd);
 	}
 }

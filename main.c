@@ -22,15 +22,15 @@
 // static pthread_t client_thread;
  static pthread_t client_type;
 pthread_t thread_do[2];
+static  pthread_t check_client_thread;
 //pthread_t threadtest;
-
 //extern uint8 listen_thread_isover;
 
-//void *thread_test(void *argv)
-//{
-//	printf("haha\n");
-//	return NULL;
-//}
+pthread_mutex_t mutex;   //互斥区
+/*
+ * 线程互斥的变量: char connect_host_online[MAX_CLIENT_NUM]
+ * */
+
 void wake_up_zb_serial_node();
 
 
@@ -40,15 +40,16 @@ int main()
 	int i;
 	int s_s;
 
+
 	db_init();
 	sysInit();
 	get_local_ipaddr();//get gateway ip addr
 	s_s= ConnectClient();
 	wake_up_zb_serial_node();//唤醒透传节点 add by yan150114
 
+	pthread_mutex_init(&mutex, NULL);//线程锁初始化
 
 //	pthread_create(&threadtest,NULL,thread_test,NULL);
-
 	pthread_create(&thread_do[0], NULL, handle_connect, (void*)&s_s);
 	pthread_create(&thread_do[1], NULL, handle_request, NULL);
 
@@ -78,7 +79,7 @@ int main()
 
 //	pthread_create(&server_thread,NULL,server_msg_thread,NULL);   //���������ͨ���߳�
 			
-
+	pthread_create(&check_client_thread,NULL,check_client_heartbeat,NULL);
 
 //	while (1)
 //		{
@@ -87,11 +88,15 @@ int main()
 //		//DBG_PRINT("1111\n");
 //        }
 
+
     //wait pthread over
     for(i=0; i<2; i++)
     	pthread_join(thread_do[i], NULL);
     pthread_join(node_thread, NULL);
     pthread_join(time_thread, NULL);
+    pthread_join(check_client_thread, NULL);
+
+    pthread_mutex_destroy(&mutex);  /*销毁互斥*/
 
     close(s_s);
     return 0;

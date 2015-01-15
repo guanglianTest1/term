@@ -107,7 +107,7 @@ void time_t_process()
 	 //setTimer(6,time1);                //test
 	 //setTimer(10,time2);               //test
 	 
-	 setTimer(20,time3);              //���40����ڵ��豸����������Ϣ��
+	 setTimer(35,time3);              //35心跳
 	// DBG_PRINT("aaaaa\n");
 	 
 	 signal(SIGALRM,timeout);         //�ӵ�SIGALRM�źţ���ִ��timeout����

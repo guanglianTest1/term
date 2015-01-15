@@ -118,7 +118,10 @@ uint16 client_buff_len;
 #define	SECURITY_SET_DEV_OPERATOR_MSG_RES			(SECURITY_SET_DEV_OPERATOR_MSG + 0x10)
 #define	SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG_RES		(SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG + 0x10)
 #define	SECURITY_UPLOAD_DEV_OPERATOR_MSG_RES		(SECURITY_UPLOAD_DEV_OPERATOR_MSG + 0x10)
-
+/**********************************************************************************************************/
+//hearbeat status
+#define	HEARTBEAT_NOT_OK							0
+#define	HEARTBEAT_OK								1
 
 
 #if 1
@@ -183,7 +186,7 @@ typedef struct {
 /*****************************************************************/
 //add yanly141230
 extern int connect_host[MAX_CLIENT_NUM];
-
+extern char connect_host_online[MAX_CLIENT_NUM]; //add yan0115
 
 //void ConnectClient();
 extern int ConnectClient();
@@ -200,7 +203,9 @@ extern int ServerSocket();
 
 extern void *handle_connect(void *argv);
 extern void *handle_request(void *argv);
+extern void *check_client_heartbeat();
 extern void send_msg_to_all_client(char *text, int text_size);
 extern void send_msg_to_client(char *text, int text_size, int fd);
+extern void set_heart_beat_client(int client_fd);
 
 #endif
