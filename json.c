@@ -155,7 +155,7 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 
 	//数据插入数据库
 	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee='%s' and num=%d and type=%d",operator,ieee,num,SECURITY_SENSOR_TYPE);
-	if(sqlite_updata_msg(sql) ==NULL)
+	if(sqlite_updata_msg(sql) ==0)
 		return JSON_INSERT_DATABASE_ERROR;
 
 	//响应
@@ -1476,14 +1476,15 @@ int parse_json_node_security(char *text,int textlen)
 						else
 						{
 							//更新到数据库中
+							switchnum = databuf[databuf_len-2];
+							switchstatus = databuf[databuf_len-1];
 							sprintf(sql,"UPDATE stable SET operator=%d WHERE ieee ='%s' and type=%d and num=%d"
 									,switchstatus,IEEE,SECURITY_SWITCH_TYPE,switchnum);
 							//printf("updata sql:%s",sql);
-							if(sqlite_updata_msg(sql) == NULL)
+							if(sqlite_updata_msg(sql) == 0)
 							{}
 							else{
-								switchnum = databuf[databuf_len-2];
-								switchstatus = databuf[databuf_len-1];
+
 								cJSON_AddNumberToObject(sroot,"MsgType",				SECURITY_SWITCH_UPLOAD_MSG);
 								cJSON_AddNumberToObject(sroot,"Sn",						10);
 								cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
@@ -1604,12 +1605,12 @@ void origin_callback_handle(char *text,int textlen)
 				//插入数据库
 				printf("set ArmAllZone\n");
 				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",1,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				if(sqlite_updata_msg(sql) ==NULL){}
+				if(sqlite_updata_msg(sql) ==0){}
 			}
 			else if(strcmp(status, or_s[1]) == 0){
 				printf("set disarm\n");
 				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",2,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				if(sqlite_updata_msg(sql) ==NULL){}
+				if(sqlite_updata_msg(sql) ==0){}
 			}
 			else{
 				cJSON_Delete(root);

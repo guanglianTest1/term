@@ -25,7 +25,8 @@
 
 
 /********************************************************************************/   //sqlite config
-#define	DATABASE_PATH					"/mnt/nfs/node.db"  //数据库存放路径
+//#define	DATABASE_PATH					"/mnt/nfs/node.db"  //数据库存放路径
+#define	DATABASE_PATH					"/gl/special/node.db"  //数据库存放路径
 
 /********************************************************************************/
 

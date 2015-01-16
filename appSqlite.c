@@ -90,7 +90,7 @@ int sqlite_updata_msg(char *sql)
 	{
 		if(db_init()<0)
 		{
-			return NULL;
+			return 0;
 		}
 	}
 
@@ -100,7 +100,7 @@ int sqlite_updata_msg(char *sql)
 		printf("updata database fail:%s\n",errmsg);
 	}
 	sqlite3_free(errmsg);
-	return 0;
+	return 1;
 }
 /*
  * node.db initialization
