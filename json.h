@@ -26,6 +26,7 @@
 
 #define  TERM_MSGTYPE  						22
 #define  ANNCE_CALLBACK						41   //add yan
+#define  GLOBAL_ARM							33   //ADD YAN
 
 #define  HEART_MSGTYPE  1
 
@@ -63,5 +64,5 @@ extern int client_msg_handle_in_common(char *buff, int size, int fd);
 extern int detach_5002_message22(char *text, int textlen);
 extern void client_msg_handle_in_msgtype_error(char *buff, int size, int fd);
 extern int parse_received_server_msg(char *text);
-extern void annce_callback_handle(char *text,int textlen);
+extern void origin_callback_handle(char *text,int textlen);
 #endif

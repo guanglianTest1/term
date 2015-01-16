@@ -541,8 +541,8 @@ int nodeSocket() //modify141230
 				case  DETACH_BELONG_SECURITY:	/*这个case处理安防的信息*/
 					parse_json_node_security(buffer,recbytes);
 					break;
-				case  ANNCE_CALLBACK:
-					annce_callback_handle(buffer, recbytes); //设备节点重新上电产生的callback处理
+				case  DETACH_BELONG_IN_COMMON:
+					origin_callback_handle(buffer, recbytes); //设备节点重新上电产生的callback处理
 					break;
 				default :
 					break;

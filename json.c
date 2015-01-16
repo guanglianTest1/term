@@ -83,46 +83,46 @@ const functionP_t normalTransaction[]=
 };
 static int msghandle_set_global_opt(cJSON *root, int fd)
 {
-	cJSON *origin = root;
-	cJSON *respond;
-	char *out;
-	int g_operator;
-	char sql[128];
-
-	printf("receive client msg: set global operator\n");
-	////////////////////////////////////////////////////////////////////////////////预取json异常处理
-	if(cJSON_GetObjectItem(origin, "OperatorType") == NULL)
-		return JSON_KEY_ERROR;
-	////////////////////////////////////////////////////////////////////////////////
-	//数据解包
-	g_operator = cJSON_GetObjectItem(origin, "OperatorType")->valueint;
-	if((g_operator >= OPERATER_MAX)||(g_operator == 0))
-		return JSON_VALUE_ERROR;
-
-	//数据插入数据库
-	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",g_operator,GLOBAL_OPERATOR_IN_IEEE_NAME);
-	sqlite_updata_msg(sql);
-
-	//响应
-	respond  = cJSON_CreateObject();
-	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
-	cJSON_AddNumberToObject(respond, "Sn", 10);
-	//cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
-	out = cJSON_PrintUnformatted(respond);
-	send_msg_to_client(out, strlen(out),fd);
-	free(out);
-	cJSON_Delete(respond);
-
-	//转发给其他客户端
-	cJSON_ReplaceItemInObject(origin, "MsgType", cJSON_CreateNumber(SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG));
-	out = cJSON_PrintUnformatted(origin);
-	send_msg_to_all_client(out, strlen(out));
-
-	//转发给服务器
-	//...wait to do in the feature!
-
-	//release
-	free(out);
+//	cJSON *origin = root;
+//	cJSON *respond;
+//	char *out;
+//	int g_operator;
+//	char sql[128];
+//
+//	printf("receive client msg: set global operator\n");
+//	////////////////////////////////////////////////////////////////////////////////预取json异常处理
+//	if(cJSON_GetObjectItem(origin, "OperatorType") == NULL)
+//		return JSON_KEY_ERROR;
+//	////////////////////////////////////////////////////////////////////////////////
+//	//数据解包
+//	g_operator = cJSON_GetObjectItem(origin, "OperatorType")->valueint;
+//	if((g_operator >= OPERATER_MAX)||(g_operator == 0))
+//		return JSON_VALUE_ERROR;
+//
+//	//数据插入数据库
+//	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",g_operator,GLOBAL_OPERATOR_IN_IEEE_NAME);
+//	sqlite_updata_msg(sql);
+//
+//	//响应
+//	respond  = cJSON_CreateObject();
+//	cJSON_AddNumberToObject(respond, "MsgType", SECURITY_SET_GLOBAL_OPERATOR_MSG_RES);
+//	cJSON_AddNumberToObject(respond, "Sn", 10);
+//	//cJSON_AddNumberToObject(respond, "respond_status", JSON_OK);
+//	out = cJSON_PrintUnformatted(respond);
+//	send_msg_to_client(out, strlen(out),fd);
+//	free(out);
+//	cJSON_Delete(respond);
+//
+//	//转发给其他客户端
+//	cJSON_ReplaceItemInObject(origin, "MsgType", cJSON_CreateNumber(SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG));
+//	out = cJSON_PrintUnformatted(origin);
+//	send_msg_to_all_client(out, strlen(out));
+//
+//	//转发给服务器
+//	//...wait to do in the feature!
+//
+//	//release
+//	free(out);
 	//printf("over!\n");
 	return	JSON_OK;
 }
@@ -1294,9 +1294,9 @@ int detach_5002_message22(char *text, int textlen)
 	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
 	if(msgtype != TERM_MSGTYPE)
 	{
-		if(msgtype == ANNCE_CALLBACK)
+		if((msgtype == ANNCE_CALLBACK)||(msgtype == GLOBAL_ARM))
 		{
-			ret = ANNCE_CALLBACK;
+			ret = DETACH_BELONG_IN_COMMON;
 		}
 		else
 		{
@@ -1547,31 +1547,74 @@ int parse_json_node_security(char *text,int textlen)
 	return 1;
 }
 /*
- * 设备节点重新上电产生的callback处理,如果在配置表内唤醒该节点
+ * 设备节点重新上电产生的callback处理,如果在配置表内唤醒该节点;
+ * 全局布防的callback处理;
+ *
  * */
-void annce_callback_handle(char *text,int textlen)
+void origin_callback_handle(char *text,int textlen)
 {
 	cJSON *root ;
 	char *ieee;
+	char sql[126];
+	int msgtype;
 	root=cJSON_Parse(text);
 	if (!root)
 		return;
-	if(cJSON_GetObjectItem(root, "IEEE") == NULL)
+	if(cJSON_GetObjectItem(root,"msgtype") == NULL)
 		return;
-	ieee = cJSON_GetObjectItem(root, "IEEE")->valuestring;
-	//查询ieee的nwkaddr
-	char sql[126];
-	char **data;
-	int row,col;
-	sprintf(sql,"select distinct nwkaddr from stable where ieee = '%s'",ieee);
-	data = sqlite_query_msg(&row, &col, sql);
-	if(data!= NULL)
+	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+	switch(msgtype)
 	{
-		send_data_to_dev_security(data[col], "wake up",8);
-		printf("nwkaddr:%s\n",data[col]);
+		case ANNCE_CALLBACK:
 
+			if(cJSON_GetObjectItem(root, "IEEE") == NULL)
+				return;
+			ieee = cJSON_GetObjectItem(root, "IEEE")->valuestring;
+			//查询ieee的nwkaddr
+
+			char **data;
+			int row,col;
+			sprintf(sql,"select distinct nwkaddr from stable where ieee = '%s'",ieee);
+			data = sqlite_query_msg(&row, &col, sql);
+			if(data!= NULL)
+			{
+				send_data_to_dev_security(data[col], "wake up",8);
+				printf("nwkaddr:%s\n",data[col]);
+
+			}
+			sqlite_free_query_result(data);
+
+			break;
+
+		case GLOBAL_ARM:
+
+			if(cJSON_GetObjectItem(root, "status") == NULL)
+				return;
+			char *status;
+			char *or_s[2] ={"ArmAllZone","DisArm"};
+			status = cJSON_GetObjectItem(root, "status")->valuestring;
+//			printf("status:%s\n",status);
+//			printf("or_s0:%s\n",or_s[0]);
+//			printf("or_s1:%s\n",or_s[1]);
+			if(strcmp(status, or_s[0]) == 0){
+				//插入数据库
+				printf("set ArmAllZone\n");
+				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",1,GLOBAL_OPERATOR_IN_IEEE_NAME);
+				sqlite_updata_msg(sql);
+			}
+			else if(strcmp(status, or_s[1]) == 0){
+				printf("set disarm\n");
+				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",2,GLOBAL_OPERATOR_IN_IEEE_NAME);
+				sqlite_updata_msg(sql);
+			}
+			else{
+				cJSON_Delete(root);
+				printf("GLOBAL_ARM string error\n");
+				return;
+			}
+			break;
 	}
-	sqlite_free_query_result(data);
+	cJSON_Delete(root);
 }
 /*
  * 解析服务器回应的消息，打印消息类型
