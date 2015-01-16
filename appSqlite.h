@@ -38,5 +38,5 @@ extern char** sqlite_query_msg(int *row, int *col, char *sql);
 extern int sqlite_query_global_operator();
 extern void sqlite_free_query_result(char **data);
 extern char** sqlite_query_ieee(char **data, int *row, int *col);
-extern void sqlite_updata_msg(char *sql);
+extern int sqlite_updata_msg(char *sql);
 #endif /* APPSQLITE_H_ */

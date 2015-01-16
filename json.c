@@ -155,7 +155,8 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 
 	//数据插入数据库
 	sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee='%s' and num=%d and type=%d",operator,ieee,num,SECURITY_SENSOR_TYPE);
-	sqlite_updata_msg(sql);
+	if(sqlite_updata_msg(sql) ==NULL)
+		return JSON_INSERT_DATABASE_ERROR;
 
 	//响应
 	respond  = cJSON_CreateObject();
@@ -1474,28 +1475,31 @@ int parse_json_node_security(char *text,int textlen)
 						}
 						else
 						{
-							switchnum = databuf[databuf_len-2];
-							switchstatus = databuf[databuf_len-1];
-							cJSON_AddNumberToObject(sroot,"MsgType",				SECURITY_SWITCH_UPLOAD_MSG);
-							cJSON_AddNumberToObject(sroot,"Sn",						10);
-							cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
-							cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
-							cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
-							cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
-							sout = cJSON_PrintUnformatted(sroot);
-							//printf("%s\n",sout);
-							s_len = strlen(sout);
-							//printf("send message to all client and server!\n");
-							//发送给所有在线客户端
-							send_msg_to_all_client(sout, s_len);
-							//发送给云代理服务器  141230
-							//....no do
 							//更新到数据库中
 							sprintf(sql,"UPDATE stable SET operator=%d WHERE ieee ='%s' and type=%d and num=%d"
 									,switchstatus,IEEE,SECURITY_SWITCH_TYPE,switchnum);
 							//printf("updata sql:%s",sql);
-							sqlite_updata_msg(sql);
-							free(sout);
+							if(sqlite_updata_msg(sql) == NULL)
+							{}
+							else{
+								switchnum = databuf[databuf_len-2];
+								switchstatus = databuf[databuf_len-1];
+								cJSON_AddNumberToObject(sroot,"MsgType",				SECURITY_SWITCH_UPLOAD_MSG);
+								cJSON_AddNumberToObject(sroot,"Sn",						10);
+								cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+								cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+								cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
+								cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
+								sout = cJSON_PrintUnformatted(sroot);
+								//printf("%s\n",sout);
+								s_len = strlen(sout);
+								//printf("send message to all client and server!\n");
+								//发送给所有在线客户端
+								send_msg_to_all_client(sout, s_len);
+								//发送给云代理服务器  141230
+								//....no do
+								free(sout);
+							}
 						}
 						break;
 
@@ -1600,12 +1604,12 @@ void origin_callback_handle(char *text,int textlen)
 				//插入数据库
 				printf("set ArmAllZone\n");
 				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",1,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				sqlite_updata_msg(sql);
+				if(sqlite_updata_msg(sql) ==NULL){}
 			}
 			else if(strcmp(status, or_s[1]) == 0){
 				printf("set disarm\n");
 				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",2,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				sqlite_updata_msg(sql);
+				if(sqlite_updata_msg(sql) ==NULL){}
 			}
 			else{
 				cJSON_Delete(root);

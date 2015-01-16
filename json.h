@@ -43,6 +43,7 @@
 #define JSON_KEY_ERROR						-5
 #define JSON_VALUE_ERROR					-6
 #define JSON_MSGTYPE_ERROR					-4
+#define JSON_INSERT_DATABASE_ERROR			-7
 
 
 #define MALLOC_ERROR						1

@@ -82,16 +82,25 @@ void sqlite_updata_global_operator(char op)
 /*
  * updata msg in node.db
  * */
-void sqlite_updata_msg(char *sql)
+int sqlite_updata_msg(char *sql)
 {
 	int ret;
 	char *errmsg;
+	if(node_db == NULL)
+	{
+		if(db_init()<0)
+		{
+			return NULL;
+		}
+	}
+
 	ret = sqlite3_exec(node_db,sql,NULL,NULL,&errmsg);
 	if(ret != SQLITE_OK)
 	{
 		printf("updata database fail:%s\n",errmsg);
 	}
 	sqlite3_free(errmsg);
+	return 0;
 }
 /*
  * node.db initialization
@@ -117,6 +126,15 @@ char** sqlite_query_msg(int *row, int *col, char *sql)
 	char **dbresult;
 	int j,i;
 	int nrow,ncol,index;
+
+	if(node_db == NULL)
+	{
+		if(db_init()<0)
+		{
+			return NULL;
+		}
+	}
+
     ret = sqlite3_get_table(node_db,sql,&dbresult,row,col,&errmsg);
     if(ret == SQLITE_OK)
     {
