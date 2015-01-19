@@ -110,6 +110,7 @@ int db_init()
     if (SQLITE_OK != sqlite3_open(DATABASE_PATH, &node_db)){//打开数据库
         printf("open db fail \n");
         sqlite3_close(node_db);
+        exit(1);  //打开数据库失败，退出
         return -1;
     }
     else

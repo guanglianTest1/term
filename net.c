@@ -301,6 +301,7 @@ void get_local_ipaddr()
 {
     struct ifaddrs *ifaddr, *ifa;
     int s;
+    char ret =0;
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
         return ;
@@ -308,18 +309,23 @@ void get_local_ipaddr()
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL)
             continue;
-        if(memcmp(ifa->ifa_name, "eth0",4) !=0)
+        if(strcmp(ifa->ifa_name, "eth0")!=0)
         	continue;
 		s = getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),
 				local_addr, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
 		if (s != 0) {
-			//printf("getnameinfo() failed: %s\n", gai_strerror(s));
+			printf("getnameinfo() failed: %s\n", gai_strerror(s));
 		}
 		else
 		{
 			printf("address:%s\n", local_addr);
+			ret =1;
 			break;
 		}
+    }
+    if(ret !=1){
+    	printf("get local addr error\n");
+    	exit(1);
     }
     freeifaddrs(ifaddr);
 }
