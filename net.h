@@ -65,6 +65,20 @@ uint16 client_buff_len;
 //{
 //
 //};
+/***********************************************************************/  //server
+#define	SERVER_SECURITY_CONFIG_MSG							0x43
+#define	SERVER_SECURITY_SENSOR_UPLOAD_MSG					0x44
+#define	SERVER_SECURITY_SWITCH_UPLOAD_MSG					0x45
+#define	SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG			0x46
+#define	SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG				0x47
+#define SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG				0x48
+
+#define	SERVER_SECURITY_CONFIG_MSG_RES							0x53
+#define	SERVER_SECURITY_SENSOR_UPLOAD_MSG_RES					0x54
+#define	SERVER_SECURITY_SWITCH_UPLOAD_MSG_RES					0x55
+#define	SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG_RES			0x56
+#define	SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG_RES				0x57
+
 
 /***********************************************************************/  //energy
 #define  HeartMsg             0x10     //心跳消息

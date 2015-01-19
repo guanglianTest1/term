@@ -40,7 +40,7 @@
 #include"HttpModule.h"
 #include"term.h"
 #include"sysinit.h"
-
+#include "appSqlite.h"
 
 
 
@@ -86,6 +86,9 @@ static int	connect_to_gateway_init(void);//add yanly141229
 static int send_server_heartbeat(int fd);
 static void close_client(int i);
 static void set_heart_beat(int i, char heart_status);
+void send_msg_to_server(char *text, int text_size, int fd);
+void send_all_security_config_to_server(int fd);
+
 
 //uint8 node_ip[20]="192.168.0.102";
 client_status client_list[MAX_CLIENT_NUM];
@@ -479,15 +482,18 @@ int connect_to_server_init(void)
 	s_add.sin_family=AF_INET;
 	s_add.sin_addr.s_addr= inet_addr(SERVER_IPADDR_DEBUG);//debug by yan
 	s_add.sin_port=htons(SERVER_PORT);
+	printf("server not connected!\n");
 	do
 	{
-		printf("server not connected!\n");
 		sleep(RECONNECT_SERVER_TIME);
 		rc = connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr));
 	}
 	while(rc ==-1);
 
 	printf("connected server socket success,socket:%d\n",cfd);
+	sleep(RECONNECT_SERVER_TIME);
+	//网关首次连接到服务器，发送配置给服务器
+	send_all_security_config_to_server(cfd);
 	return cfd;
 }
 /*
@@ -590,12 +596,15 @@ int ServerSocket() //modify141230
 		r_msg_num = msgrcv(MsgserverTxId,&msg_Rxque,sizeof(msgform),0,IPC_NOWAIT);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
 		if((r_msg_num ==-1)&&(errno !=ENOMSG))
 		{
+			printf("errno:%d\n",errno);
 			perror("msgrcv:");
 		}
-		else
+		else if(r_msg_num >0)
 		{
 			//send
-
+			printf("be will sending msg to server, type:%ld,size:%d\n",msg_Rxque.mtype,r_msg_num);
+//			printf("server msg que:%s\n",msg_Rxque.mtext);
+			send_msg_to_server(msg_Rxque.mtext, r_msg_num, cfd);
 		}
 //接收server msg
 		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);
@@ -642,7 +651,7 @@ static int send_server_heartbeat(int fd)
 		root=cJSON_CreateObject();
 	    cJSON_AddNumberToObject(root,"MsgType", 64);
 	    cJSON_AddNumberToObject(root,"Sn",		10);
-	    out = cJSON_Print(root);
+	    out = cJSON_PrintUnformatted(root);
 	    ret = send(fd,out,strlen(out),MSG_DONTWAIT);
 		if(ret ==-1)
 		{
@@ -1077,5 +1086,92 @@ void send_msg_to_client(char *text, int text_size, int fd)
 		printf("sock%d send error ,may be disconneted\n",fd);
 	}
 }
+//发送给server
+void send_msg_to_server(char *text, int text_size, int fd)
+{
+	if(send(fd,text,text_size,0)<=0)
+	{
+		close(fd);
+		printf("server sock%d send error ,may be disconneted\n",fd);
+	}
+}
+/*
+ * 网关连接到服务器后，发送安防表配置信息给服务器
+ * */
+void send_all_security_config_to_server(int fd)
+{
+	char **q_data;
+	char **ieee;
+	int ieee_row,ieee_col;
+	int q_row,q_col;int i,j;
+	int index_ieee,index_q;
+	char *sql_req_config = "select ieee,nwkaddr,type,subtype,num,info,operator from stable where nwkaddr not null";
+	char *sql_req_ieee = "SELECT  DISTINCT ieee,nwkaddr FROM stable where nwkaddr not null";
 
-
+	cJSON *sroot;
+	cJSON *NodeList_array, *NodeList_item;
+	cJSON *SubNodeItem, *SubNodeArray;
+    int opt ;
+    char *out=NULL;
+    printf("when connect server, send all security config to server\n");
+//query database:
+    q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
+    if(q_data ==NULL)
+    {
+    	printf("query db error\n");
+    	sqlite_free_query_result(q_data);
+    	return;
+    }
+    ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
+    if(ieee == NULL)
+    {
+    	printf("query db error\n");
+    	sqlite_free_query_result(ieee);
+    	return;
+    }
+    opt = sqlite_query_global_operator();
+    if(opt ==-1)
+    {
+    	printf("query db error\n");
+    	return;
+    }
+//organize json package
+    sroot = cJSON_CreateObject();
+	cJSON_AddNumberToObject(sroot, "MsgType", SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG);
+	cJSON_AddNumberToObject(sroot, "Sn", 10);
+	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt);
+	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item =cJSON_CreateArray());
+	for(i=0;i<ieee_row;i++)
+	{
+		index_ieee = i*ieee_col+ieee_col;//ieee data的每行头
+		cJSON_AddItemToArray(NodeList_item, NodeList_array=cJSON_CreateObject());
+		cJSON_AddStringToObject(NodeList_array, "SecurityNodeID", ieee[index_ieee]);
+		cJSON_AddStringToObject(NodeList_array, "Nwkaddr", ieee[index_ieee+1]);
+		cJSON_AddItemToObject(NodeList_array, "SubNode", SubNodeItem =cJSON_CreateArray());
+		for(j=0;j<q_row;j++)
+		{
+			index_q = j*q_col + q_col;//data的每行头
+			if(strcmp(q_data[index_q], ieee[index_ieee])==0)
+			{
+				cJSON_AddItemToArray(SubNodeItem, SubNodeArray=cJSON_CreateObject());
+				cJSON_AddNumberToObject(SubNodeArray, "Type", atoi(q_data[index_q+2]));
+				cJSON_AddNumberToObject(SubNodeArray, "SubType", atoi(q_data[index_q+3]));
+				cJSON_AddNumberToObject(SubNodeArray, "Num", atoi(q_data[index_q+4]));
+				cJSON_AddStringToObject(SubNodeArray, "Info", q_data[index_q+5]);
+				cJSON_AddNumberToObject(SubNodeArray, "OperatorType", atoi(q_data[index_q+6]));
+			}
+			else
+			{}
+		}
+	}
+	out = cJSON_PrintUnformatted(sroot);
+	printf("size:%d\n", strlen(out));
+	send_msg_to_server(out, strlen(out), fd);
+//	json_msgsnd(MsgserverTxId, SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG, out, strlen(out));
+//free:
+	cJSON_Delete(sroot);
+	free(out);
+	sqlite_free_query_result(q_data);
+	sqlite_free_query_result(ieee);
+	return;
+}
