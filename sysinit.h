@@ -12,11 +12,12 @@ typedef unsigned char uint8;
 
 
 
-#define MAXBUF 1024
+#define MAXBUF 				1024
+#define MAX_MSG_BUF			2048
 
 typedef struct {
 	  long mtype;
-	  char mtext[MAXBUF];
+	  char mtext[MAX_MSG_BUF];
  }msgform;
 
 //#define __ARM_BOARD
