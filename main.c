@@ -14,6 +14,7 @@
 #include<unistd.h>
 
 #include "appSqlite.h"
+#include "user_config.h"
 
  static pthread_t time_thread;
  static pthread_t server_thread;
@@ -48,37 +49,26 @@ int main()
 	wake_up_zb_serial_node();//唤醒透传节点 add by yan150114
 
 	pthread_mutex_init(&mutex, NULL);//线程锁初始化
+	pthread_create(&thread_do[0], NULL, handle_connect, (void*)&s_s);//客户端连接单元
+	pthread_create(&thread_do[1], NULL, handle_request, NULL);//客户端业务单元
 
-//	pthread_create(&threadtest,NULL,thread_test,NULL);
-	pthread_create(&thread_do[0], NULL, handle_connect, (void*)&s_s);
-	pthread_create(&thread_do[1], NULL, handle_request, NULL);
-
-//	client_type_socket();
-
-//	time_t_process();
-//
-//	term_msg_process();
-//
-//	node_msg_process();
-//
-//	server_msg_process();
 //	pthread_create(&client_thread,NULL,client_msg_thread,NULL);   //���������ͨ���߳�
 
     
 //    pthread_create(&client_type,NULL,client_type_thread,NULL);   //���ͻ�������
 //
 //
-	pthread_create(&time_thread,NULL,time_t_thread,NULL);          //��ʱ���߳�
+	pthread_create(&time_thread,NULL,time_t_thread,NULL);          //定时器单元
 //
 //
 //	pthread_create(&term_thread,NULL,term_msg_thread,NULL);       //���ͳ�����Ϣ�߳�
 
 
-	pthread_create(&node_thread,NULL,node_msg_thread,NULL);       //与网关5002建立连接，获取callback,客户端形式
+	pthread_create(&node_thread,NULL,node_msg_thread,NULL);       //与网关5018单元
 
-
-//	pthread_create(&server_thread,NULL,server_msg_thread,NULL);   //���������ͨ���߳�
-			
+#ifdef USE_SERVER_THREAD
+	pthread_create(&server_thread,NULL,server_msg_thread,NULL);   //与云代理5040单元
+#endif
 	pthread_create(&check_client_thread,NULL,check_client_heartbeat,NULL);
 
 //	while (1)

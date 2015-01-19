@@ -66,4 +66,5 @@ extern int detach_5002_message22(char *text, int textlen);
 extern void client_msg_handle_in_msgtype_error(char *buff, int size, int fd);
 extern int parse_received_server_msg(char *text);
 extern void origin_callback_handle(char *text,int textlen);
+extern void json_msgsnd(int id, int type, char *buff, int buff_size);
 #endif

@@ -67,6 +67,7 @@ static int msghandle_error(cJSON *root, int fd){return 0;}
 static void upload_sensor_change_respond(char *addr, int num, int text_len);
 
 
+
 const functionP_t normalTransaction[]=
 {
 	msghandle_security_config, //0x70
@@ -175,7 +176,12 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 
 	//转发给服务器
 	//...wait to do in the feature!
-
+	#ifdef USE_SERVER_THREAD
+	cJSON_ReplaceItemInObject(origin, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG));
+	out = cJSON_PrintUnformatted(origin);
+	json_msgsnd(MsgserverTxId, SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG, out, strlen(out));
+	#endif
+	
 	//release
 	free(out);
 	//printf("over!\n");
@@ -245,9 +251,13 @@ static int msghandle_security_config(cJSON *root, int fd)
 	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(SECURITY_CONFIG_MSG_RES));
 	out = cJSON_PrintUnformatted(_root);
 	send_msg_to_all_client(out, strlen(out));
-	//printf("send to all client >> ");
 	//转发给服务器
-	//...wait to do in the feature!
+	#ifdef USE_SERVER_THREAD
+	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_CONFIG_MSG));
+	out = cJSON_PrintUnformatted(_root);
+	json_msgsnd(MsgserverTxId, SERVER_SECURITY_CONFIG_MSG, out, strlen(out));
+	#endif
+
 	free(out);
 	//配置更新到数据库
 	//opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
@@ -824,7 +834,7 @@ int client_msg_handle_security(char *buff, int size, int fd)
 			cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
 			cJSON_AddNumberToObject(sroot,"Sn",				ret);
 			//cJSON_AddNumberToObject(sroot,"respond_status",				ret);
-			sout=cJSON_Print(sroot);
+			sout=cJSON_PrintUnformatted(sroot);
 			send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
 			cJSON_Delete(sroot);
 			free(sout);
@@ -851,7 +861,7 @@ int client_msg_handle_in_common(char *buff, int size, int fd)
 			case HeartMsg:
 				cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
 				cJSON_AddNumberToObject(sroot,"Sn",				10);
-				sout=cJSON_Print(sroot);
+				sout=cJSON_PrintUnformatted(sroot);
 				set_heart_beat_client(fd);//add yan 150115
 				break;
 			default:break;
@@ -876,7 +886,7 @@ void client_msg_handle_in_msgtype_error(char *buff, int size, int fd)
 	sroot=cJSON_CreateObject();
 	cJSON_AddNumberToObject(sroot,"MsgType",		MsgType);//msgtype值错误回复原来msgtype
 	cJSON_AddNumberToObject(sroot,"Sn",				JSON_MSGTYPE_ERROR);
-	sout=cJSON_Print(sroot);
+	sout=cJSON_PrintUnformatted(sroot);
 	send_msg_to_client(sout,strlen(sout),fd);  //tcp send respond
 	cJSON_Delete(sroot);
 	free(sout);
@@ -1445,13 +1455,15 @@ int parse_json_node_security(char *text,int textlen)
 								cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
 								cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
 								sout = cJSON_PrintUnformatted(sroot);
-								//printf("%s\n",sout);
 								s_len = strlen(sout);
-								//printf("send message to all client and server!\n");
 								//发送给所有在线客户端
 								send_msg_to_all_client(sout, s_len);
 								//发送给云代理服务器  141230
-								//....no do
+								#ifdef USE_SERVER_THREAD
+								cJSON_ReplaceItemInObject(sroot, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_SENSOR_UPLOAD_MSG));
+								sout = cJSON_PrintUnformatted(sroot);
+								json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
+								#endif
 								free(sout);
 							}
 							else
@@ -1492,13 +1504,16 @@ int parse_json_node_security(char *text,int textlen)
 								cJSON_AddNumberToObject(sroot,"SwitchNum",				switchnum);
 								cJSON_AddNumberToObject(sroot,"SwitchStatus",			switchstatus);
 								sout = cJSON_PrintUnformatted(sroot);
-								//printf("%s\n",sout);
 								s_len = strlen(sout);
-								//printf("send message to all client and server!\n");
 								//发送给所有在线客户端
 								send_msg_to_all_client(sout, s_len);
 								//发送给云代理服务器  141230
-								//....no do
+								#ifdef USE_SERVER_THREAD
+								cJSON_ReplaceItemInObject(sroot, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_SWITCH_UPLOAD_MSG));
+								sout = cJSON_PrintUnformatted(sroot);
+								json_msgsnd(MsgserverTxId, SERVER_SECURITY_SWITCH_UPLOAD_MSG, sout, strlen(sout));
+								#endif
+
 								free(sout);
 							}
 						}
@@ -1597,6 +1612,7 @@ void origin_callback_handle(char *text,int textlen)
 				return;
 			char *status;
 			char *or_s[2] ={"ArmAllZone","DisArm"};
+			char i;
 			status = cJSON_GetObjectItem(root, "status")->valuestring;
 //			printf("status:%s\n",status);
 //			printf("or_s0:%s\n",or_s[0]);
@@ -1605,18 +1621,37 @@ void origin_callback_handle(char *text,int textlen)
 				//插入数据库
 				printf("set ArmAllZone\n");
 				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",1,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				if(sqlite_updata_msg(sql) ==0){}
+				if(sqlite_updata_msg(sql) ==0){
+					exit(1);
+				}
+				i =1;
 			}
 			else if(strcmp(status, or_s[1]) == 0){
 				printf("set disarm\n");
 				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",2,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				if(sqlite_updata_msg(sql) ==0){}
+				if(sqlite_updata_msg(sql) ==0){
+					exit(1);
+				}
+				i =2;
 			}
 			else{
 				cJSON_Delete(root);
 				printf("GLOBAL_ARM string error\n");
 				return;
 			}
+			//发送全局布撤防命令到服务器
+#ifdef USE_SERVER_THREAD
+			cJSON *sroot;
+			char *sout;
+			sroot=cJSON_CreateObject();
+			cJSON_AddNumberToObject(sroot,"MsgType",				SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG);
+			cJSON_AddNumberToObject(sroot,"Sn",						10);
+			cJSON_AddNumberToObject(sroot,"OperatorType",			i);
+			sout = cJSON_PrintUnformatted(sroot);
+			json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
+			cJSON_Delete(sroot);
+			free(sout);
+#endif
 			break;
 	}
 	cJSON_Delete(root);
@@ -1769,7 +1804,22 @@ void package_json_server(msgform *msg_Rxque ,uint8 Rx_msgnum,uint16 socketflg)
 				
   return;
 }
+/*
+ * fun:发送数据队列到服务器线程
+ * add yan150119
+ * */
+void json_msgsnd(int id, int type, char *buff, int buff_size) //add yan150119
+{
+	msgform msend;
 
+	if(buff_size > MAX_MSG_BUF){
+		printf("msgsnd error: send size > MAX_MSG_BUF !\n");
+		return;
+	}
+	msend.mtype = type;
+	memcpy(msend.mtext, buff, buff_size);
+	msgsnd(MsgserverTxId, &msend, buff_size, 0);
+}
 
 
 
