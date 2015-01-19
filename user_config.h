@@ -38,6 +38,9 @@
 #define WARNING_TIME					"30"    //报警时间
 #define WARNING_TYPE					"1"		//报警类型: 1盗窃，2火警，3紧急情况||突发事件,4门铃，5设备故障
 
+/********************************************************************************/ //USE_CONFIG
+//#define USE_SERVER_THREAD
+
 
 extern char local_addr[1025];  //gateway ipaddr
 
