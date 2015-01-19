@@ -15,12 +15,12 @@
 #define SERVER_PORT    					5040
 //#define GATEWAY_IPADDR   				"192.168.0.102"
 //#define SERVER_IPADDR  				"192.168.0.100"
-#define GATEWAY_IPADDR   				"192.168.1.137"
-#define SERVER_IPADDR  					"192.168.1.111"
+//#define GATEWAY_IPADDR   				"192.168.1.137"
+//#define SERVER_IPADDR  					"192.168.1.111"
 #define SERVER_IPADDR_DEBUG				"192.168.1.196"
 #define MAX_CLIENT_NUM 					32
 
-#define RECONNECT_SERVER_TIME			5  //5s
+#define RECONNECT_SERVER_TIME			1  //1s
 #define RECONNECT_GATAWAY5018_TIME		5
 
 
