@@ -480,7 +480,7 @@ int connect_to_server_init(void)
 	}
 	bzero(&s_add,sizeof(struct sockaddr_in));
 	s_add.sin_family=AF_INET;
-	s_add.sin_addr.s_addr= inet_addr(SERVER_IPADDR_DEBUG);//debug by yan
+	s_add.sin_addr.s_addr= inet_addr(local_addr);//(SERVER_IPADDR_DEBUG);//debug by yan
 	s_add.sin_port=htons(SERVER_PORT);
 	printf("server not connected!\n");
 	do
