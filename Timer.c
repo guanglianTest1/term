@@ -20,6 +20,8 @@
 #include"HttpModule.h"
 #include"term.h"
 #include"sysinit.h"
+#include "appSqlite.h"
+#include "user_config.h"
 
  int time_num=0,t=1;                //time_num����ʱ���ĸ�����t��ʾʱ�䣬�������
 
@@ -27,12 +29,16 @@
 // uint8 time2_flag=disable;
 
 
- uint8 time1_flag=disable;
- uint8 time2_flag=disable;
- //uint8 time3_flag=disable;
- uint8 client_flag=disable;
- uint8 node_heart_flag=disable;
- uint8 server_heart_flag=disable;
+ volatile uint8 time1_flag=disable;
+ volatile uint8 time2_flag=disable;
+ volatile uint8 time4_flag=disable;
+  //uint8 time3_flag=disable;
+  volatile uint8 client_flag=disable;
+  volatile uint8 node_heart_flag=disable;
+  volatile uint8 server_heart_flag=disable;
+  extern node_native nodetable_native[NODE_NUMM];
+  int Term_rcvPeriod=TERM_PEIOD;  //24 hour
+  extern volatile int server_connected_fd;
  
  void setTimer(int t,int f)       //�½�һ����ʱ��
  { 
@@ -44,7 +50,19 @@
 	 myTimer[time_num++]=a;
  }
   
- 
+ void ModTimer(int newtime,int timeid)       //�½�һ����ʱ��
+  {
+	 int j=0;
+	 for(j=0;j<time_num;j++)
+	 {
+		 if(myTimer[j].func==timeid)
+		 {
+			 myTimer[j].total_time=newtime;
+			 myTimer[j].left_time=newtime;
+			 break;
+	 	 }
+	 }
+  }
 
  void timeout()                 //�ж϶�ʱ���Ƿ�ʱ���Լ���ʱʱ��Ҫִ�еĶ���
  {
@@ -66,11 +84,12 @@
 			{	   
 			case time1:
 			   	 time1_flag=enable;
-//			   	 DBG_PRINT("time1_flag= %d\n",time1_flag);//屏蔽 yanly150108
+     		   	 //DBG_PRINT("time1_flag= %d\n",time1_flag);//屏蔽 yanly150108
 			     break;
 			case time2:
 				 time2_flag=enable;  
-//				 DBG_PRINT("time2_flag= %d\n",time2_flag);//屏蔽 yanly150108
+				 sqlite_query_to_native();  //add by yang 150522
+    			 //DBG_PRINT("time2_flag= %d\n",time2_flag);//屏蔽 yanly150108
 			     break;
 		    case time3:
 		    	//DBG_PRINT("3333\n");
@@ -78,12 +97,12 @@
 				 client_flag=enable;     //40S��ѯ�ͻ���������Ϣ
 				 node_heart_flag=enable;
 				 server_heart_flag=enable;
-//				 DBG_PRINT("client_flag= %d\n",client_flag);    //屏蔽 yanly150108
-//				 DBG_PRINT("node_heart_flag= %d\n",node_heart_flag);
-//				 DBG_PRINT("server_heart_flag= %d\n",server_heart_flag);
+				 if(server_connected_fd)   //如果没有连接到服务器，不应该向队列发送心跳包。
+					 send_server_heartbeat();
 				 break;
-		     
-				 	 
+		    case time4:
+		    	 time4_flag=enable;       //40S��ڵ��豸�����������־
+		    	 break;
 		   	  default:break;  
 			
 			}
@@ -93,22 +112,27 @@
 	 }
  }
   
-void time_t_process()
- {
-	 pthread_t time_thread;
-	 pthread_create(&time_thread,NULL,time_t_thread,NULL);
-
- }
+#if 1
  void *time_t_thread(void *p)     
  { 
- 
-	 setTimer(60,time1);              //���һ���ӳ�һ����
-	 setTimer(86400,time2);          //һ�쳭��һ��
-	 //setTimer(6,time1);                //test
-	 //setTimer(10,time2);               //test
-	 
-	 setTimer(35,time3);              //35心跳
+
+	 setTimer(TERM_INTER,time1);                //test
+	 setTimer(Term_rcvPeriod,time2);               //test
+	 //DBG_PRINT("Term_rcvPeriod=%d\n",Term_rcvPeriod);
+	 setTimer(HEART_TIME,time3);              //40心跳
+	 setTimer(CLIENT_TIME,time4);              //40心跳
 	// DBG_PRINT("aaaaa\n");
+	 if(nodetable_native[0].termtable_native[0].TermPeriod_native>0)
+	 	 {
+	 		Term_rcvPeriod=60*nodetable_native[0].termtable_native[0].TermPeriod_native;
+	 	    //printf("Term_rcvPeriod=%d\n",Term_rcvPeriod);
+	 	 }
+	    else
+	 	 {
+	 	   Term_rcvPeriod=TERM_PEIOD;
+	 	   //printf("Term_rcvPeriod=%d\n",Term_rcvPeriod);
+	 	 }
+	 	ModTimer(Term_rcvPeriod,time2);
 	 
 	 signal(SIGALRM,timeout);         //�ӵ�SIGALRM�źţ���ִ��timeout����
 	 
@@ -123,4 +147,5 @@ void time_t_process()
 	 exit(0);
  }
  
+#endif
  

@@ -16,7 +16,7 @@
 #define _JSON_H
 #include"sysinit.h"
 #include"timer.h"
-
+#include"cJSON.h"
 #define online 1
 #define offline 0
 
@@ -50,13 +50,17 @@
 
 
 /************************************************************************************/
-
-uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket);
+//extern int msghandle_ConfigQueAckMsg(cJSON *root,int tmp_socket);
+int msghandle_ConfigQueAckMsg(int msg_sn,uint16 tmp_socket);
+//int parse_json_client(char *text,uint8 textlen,int tmp_socket);
+int parse_json_client(int msgtype,cJSON *root,int tmp_socket);
 //void parse_json_client(client_status client_list);
-void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket);
+//int ConfigQueAckMsg(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket);
+//int package_json_client(uint8 sendmsgtype,int msg_sn,int tmp_socket);
 void parse_json_node(char *text,uint8 textlen);
 void package_json_server(msgform *msg_Rxque ,uint8 Rx_msgnum,uint16 socketflg);
 void parse_json_server(char *text,uint8 textlen);
+int client_msg_handle_energy(char *text,int textlen,int tmp_socket);
 
 extern int parse_json_node_security(char *text,int textlen);
 extern int detach_interface_msg_client(char *text,int textlen);//add yanly141229
@@ -67,4 +71,8 @@ extern void client_msg_handle_in_msgtype_error(char *buff, int size, int fd);
 extern int parse_received_server_msg(char *text);
 extern void origin_callback_handle(char *text,int textlen);
 extern void json_msgsnd(int id, int type, char *buff, int buff_size);
+
+extern void json_msgsndclient(int id, int type, char *buff, int buff_size);
+void set_global_opertor_status(char status);
+
 #endif

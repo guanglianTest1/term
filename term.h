@@ -2,7 +2,7 @@
 #define _TERM_H
 
 #include"sysinit.h"
-
+#include "appSqlite.h"
 
 
 
@@ -211,30 +211,16 @@ typedef struct{
 #define FLAG_DATE       0x0200
 #define FLAG_ALPHA      0x1000
 
-typedef struct
-{
-	uint16	tm_sec;		/* Seconds: 0-59 (K&R says 0-61?) */
-	uint16	tm_min;		/* Minutes: 0-59 */
-	uint16	tm_hour;	/* Hours since midnight: 0-23 */
-	uint16	tm_mday;	/* Day of the month: 1-31 */
-	uint16	tm_mon;		/* Months *since* january: 0-11 */
-	uint16	tm_year;	/* Years since 1900 */
-	uint16	tm_wday;	/* Days since Sunday (0-6) */
-	uint16	tm_yday;	/* Days since Jan. 1: 0-365 */
-	uint16	tm_isdst;	/* +1 Daylight Savings Time, 0 No DST,
-				 * -1 don't know */
-}tm;
 
 
 
 typedef struct {
 
-    //uint8  *TermCode;      //智能表的编号
-	 uint8 TermCode[TERM_LEN];
-	 uint8  TermType;      //智能表的类型
-	 uint32 ReportData;
-
-
+    char *TermCode;      //智能表的编号
+	// uint8 TermCode[TERM_LEN];
+	// uint8  TermType;      //智能表的类型
+     char *TermTime ;
+	 float ReportData;
 	}TxMsg;
 
 #define MsgComNative 1
@@ -246,7 +232,8 @@ union test {
 } test;
 /******************************************************************************************************/
 //void  SendmsgToclient(TxMsg Tmp_TxMsg);
-void  SendmsgToclient(TxMsg TmpBuf);
+//void  SendmsgToclient(TxMsg *TmpBuf);
+void  SendmsgToclient(char *code,char *systime,float pwval);
 
 void *term_msg_thread(void *p);
 
@@ -260,16 +247,9 @@ void serialMsgDeal(uint8 *msgBuf,uint8 msg_len);
 
 void unpack_term_msg(uint8 *sdata,uint8 slen);
 
-int digit2time(char *timeStr, int iLen, tm *ptTime);
 void term_msg_process();
 
 
-
-
-
-
-//extern void getsystm(void);
-//extern int prtfBuf(U8_T mod,U8_T *dataBuf, int length,char* info);
 
 /********************************************************************/
 extern void send_data_to_dev_security(char *nwkaddr, char *text, int text_len);

@@ -1,5 +1,5 @@
-#ifndef _Timerr_H
-#define _Timerr_H
+#ifndef _Timer_H
+#define _Timer_H
 
 #include"sysinit.h"
 
@@ -26,14 +26,12 @@ struct Timer           //Timer�ṹ�壬��������һ����
 	 int func;         //�ö�ʱ����ʱ��Ҫִ�еĴ���ı�־
  }myTimer[N];          //����Timer���͵����飬�����������еĶ�ʱ��
   
-
  
-
-
 void setTimer(int t,int f);
 void timeout()	;
 void *time_t_thread(void *p) ;
 void time_t_process();
+void ModTimer(int newtime,int timeid);
 
 
 #endif

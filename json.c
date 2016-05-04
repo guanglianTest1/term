@@ -2,11 +2,11 @@
   Copyright (C), 2009-2014 GuangdongGuanglian Electronic Technology Co.,Ltd.
   FileName:      json.cpp
   Author:        jiang
-  Version :      1.0    
+  Version :      1.0
   Date:          2014-03-19
-  Description:   实现封装和解析json相关接口      
-  History:         
-      <author>  <time>   <version >   <desc> 
+  Description:   实现封装和解析json相关接口
+  History:
+      <author>  <time>   <version >   <desc>
 ***************************************************************************/
 #include<string.h>
 #include<stdio.h>
@@ -16,10 +16,11 @@
 #include<unistd.h>
 #include<arpa/inet.h>
 #include<netdb.h>
-#include"pthread.h"
 #include <sqlite3.h>  //add yan150104
+#include <time.h>
+#include <errno.h>
 
-
+#include"pthread.h"
 #include"net.h"
 #include"json.h"
 #include"cJSON.h"
@@ -28,27 +29,37 @@
 #include"term.h"
 #include"sysinit.h"
 #include "appSqlite.h" //add yanly150105
-
+#include"user_config.h"
 //#include"public.h"
-extern uint16 client_num;
+//extern uint16 client_num;
 extern int MsgtermTxId; //���ͳ������ݵ���Ϣ����
-extern int MsgtermRxId; //���ܳ������ݵ���Ϣ����
+//extern int MsgtermRxId; //���ܳ������ݵ���Ϣ����
 extern int MsgserverTxId;//���ͷ��������ݵ���Ϣ����
 
-extern node_list node_table[NODE_NUM];
-extern client_status client_list[MAX_CLIENT_NUM];
-extern uint8 Term_Num[NODE_NUM];
+//extern node_list node_table[NODE_NUM];
+//extern client_status client_list[MAX_CLIENT_NUM];
+//extern uint8 Term_Num[NODE_NUM];
 extern uint8 Client_Sn;
 extern int Client_Socket;
-//extern uint8 msgfromflg;
+extern uint8 msgfromflg;
+
+//extern uint8 ConfigReportMsg_flag;
+//extern uint8 TermDataReportMsg_flag;
+
+extern int Term_rcvPeriod;
+uint8 ConfigReportMsg_sn=0;
 
 #define JSON_PARSE_FAILED	 -1
 uint8 Rx_count1=0;
 uint8 Rx_count2=0;
 
-char get_systime[128]={0};
-char *GatewayID="8888888";
-uint8 server_sn=0;
+char get_systime[INFOLEN]={0};
+/*全局布撤防状态,1-全局布防，2-全局撤防
+ * */
+char global_operator = 2;
+//extern uint8 Term_Num[];
+//char *GatewayID="8888888";
+//extern uint8 server_sn;
 
 //add yanly141229
 typedef int (* functionP_t) (cJSON *root, int fd);
@@ -138,7 +149,7 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 
 	char sql[128];
 
-	printf("receive client msg: set device operator\n");
+//	GDGL_DEBUG("set device operator\n");
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	if((cJSON_GetObjectItem(origin, "OperatorType") == NULL)||
 		(cJSON_GetObjectItem(origin, "SensorNum") == NULL)||
@@ -181,13 +192,15 @@ static int msghandle_set_dev_opt(cJSON *root, int fd)
 	out = cJSON_PrintUnformatted(origin);
 	json_msgsnd(MsgserverTxId, SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG, out, strlen(out));
 	#endif
-	
+
 	//release
 	free(out);
 	//printf("over!\n");
 	return JSON_OK;
 }
 #if 1
+
+
 static int msghandle_security_config(cJSON *root, int fd)
 {
 	cJSON *_root = root;
@@ -200,7 +213,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 	//
 	subsecurityConfig_t *subnod;
 
-	printf("receive client msg: set security config\n");
+//	GDGL_DEBUG("set security config\n");
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	{
 //		if((cJSON_GetObjectItem(_root, "GlobalOpt")) == NULL)
@@ -281,7 +294,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 		    	subnod = (subsecurityConfig_t *)malloc(subnode_cnt*sizeof(subsecurityConfig_t));//malloc //
 		    	if(subnod ==NULL)
 		    	{
-		    		printf("malloc fail!\n");
+		    		GDGL_DEBUG("malloc fail!\n");
 		    		return MALLOC_ERROR;
 		    	}
 		    	for(j=0;j<subnode_cnt;j++)
@@ -304,7 +317,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 		    	//向节点设备请求开关当前状态
 		    	for(j=0;j<subnode_cnt;j++)
 		    	{
-		    		printf("request switch status for ieee %s,num",SecurityNodeID);
+//		    		printf("request switch status for ieee %s,num",SecurityNodeID);
 
 		    		if(subnod[j].type == SECURITY_SWITCH_TYPE)
 		    		{
@@ -312,7 +325,7 @@ static int msghandle_security_config(cJSON *root, int fd)
 		    			buff[10] = subnod[j].num;
 		    			buff[11] = subnod[j].operator;
 		    			send_data_to_dev_security(Nwkaddr, buff, 12);
-		    			printf("%d,",j);
+//		    			printf("%d,",j);
 		    		}
 		    	}
 		    	//printf(">>over!\n");
@@ -459,35 +472,35 @@ static int msghandle_security_config_check(cJSON *root, int fd)
 	cJSON *sroot;
 	cJSON *NodeList_array, *NodeList_item;
 	cJSON *SubNodeItem, *SubNodeArray;
-    int opt ;
+//    int opt ;
     char *out=NULL;
-    printf("receive client msg: security config check\n");
+//    GDGL_DEBUG("security config check\n");
 //query database:
     q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
     if(q_data ==NULL)
     {
-    	printf("query db error\n");
+//    	GDGL_DEBUG("query db error\n");
     	sqlite_free_query_result(q_data);
     	return JSON_VALUE_ERROR;
     }
     ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
     if(ieee == NULL)
     {
-    	printf("query db error\n");
+//    	printf("query db error\n");
     	sqlite_free_query_result(ieee);
     	return JSON_VALUE_ERROR;
     }
-    opt = sqlite_query_global_operator();
-    if(opt ==-1)
-    {
-    	printf("query db error\n");
-    	return JSON_VALUE_ERROR;
-    }
+//    opt = sqlite_query_global_operator();
+//    if(opt ==-1)
+//    {
+//    	printf("query db error\n");
+//    	return JSON_VALUE_ERROR;
+//    }
 //organize json package
     sroot = cJSON_CreateObject();
 	cJSON_AddNumberToObject(sroot, "MsgType", 129);
 	cJSON_AddNumberToObject(sroot, "Sn", 10);
-	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt);
+//	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt);
 	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item =cJSON_CreateArray());
 	for(i=0;i<ieee_row;i++)
 	{
@@ -544,7 +557,7 @@ static int msghandle_switch_state_ctrl(cJSON *root, int fd)
 	char buff[30] ={0x01,0x01,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00,0x01};
 	int b_len;
 
-	printf("receive client msg: control switch\n");
+//	GDGL_DEBUG("set control switch\n");
 	//Sn = cJSON_GetObjectItem(_root, "Sn")->valueint;
 	////////////////////////////////////////////////////////////////////////////////预取json异常处理
 	if((cJSON_GetObjectItem(_root,"SecurityNodeID") == NULL)||
@@ -592,184 +605,11 @@ static void upload_sensor_change_respond(char *addr, int num, int text_len)
 	char buff[11] ={0x00,0x02,0x53,0x74,0x72,0x69,0x6E,0x67,0x00,0x00,0x00};
 	int b_len = 11;
 	buff[10] = num;
-	printf("sensor upload respond to dev...\n");
+//	printf("sensor upload respond to dev...\n");
 	send_data_to_dev_security(addr, buff, b_len);
 }
 
 
-/*********************************************************************************/
-uint8 parse_json_client(char *text,uint8 textlen,int tmp_socket)
-{
- 
-	int msgtype;
-    int sn;
-    cJSON *root;
-	cJSON *NodeList=NULL;
-	cJSON *TermList=NULL;
-	cJSON *nodeitem=NULL;
-	cJSON *termitem=NULL;
-
-	uint8 i,j,k,ret;
-
-    msgform term_msg;
-	msgform server_msg;
-	char *IEEE_ID=NULL;
-	char *EnergyNode_ID=NULL;
-	char *Term_Code=NULL;
-	char *Term_Info=NULL;
-    uint8 termlen=0;
-    uint8 tmp_code[TERM_LEN]={0};
-    //uint8 termcode[TERM_LEN]={0};
-//    uint8 EnergyNodeID[NODE_LEN]={0};
-    uint8 node_num=0;
-    uint8 term_num=0;
-	printf("text=%s\n",text);
-
-	root=cJSON_Parse(text);
-        if (!root)
-        {
-            printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
-            ret = JSON_PARSE_FAILED;
-        }
-        else
-        {
-
-		 msgtype = cJSON_GetObjectItem(root, "MsgType")->valueint;
-		 sn = cJSON_GetObjectItem(root, "Sn")->valueint;
-		 printf("MsgType=%02x\n",msgtype);
-		 printf("Sn=%02x\n",sn);
-
-		 switch(msgtype)
-
-		 {
-		  case HeartMsg:  //收到心跳消息
-
-			  printf("client HeartMsg\n");
-		       
-			   client_list[client_num].client_alive=online;
-			   client_list[client_num].client_count=client_heart_count;//心跳检测时间为3*40=120s
-
-			   package_json_client(HeartAckMsg,sn,tmp_socket);     //发送心跳响应消息
-			   break;
-
-		  case ConfigMsg: //收到配置下发消息
-
-			   printf("client ConfigMsg\n");
-			   memset(node_table,0,sizeof(node_table));
-			   NodeList=cJSON_GetObjectItem(root, "NodeList");
-			   if(NodeList)
-			   {
-				 node_num=cJSON_GetArraySize (NodeList); 
-				 if(node_num)
-				 {
-				  for(i=0;i<node_num;i++)
-				  {
-				    nodeitem=cJSON_GetArrayItem(NodeList, i);
-
-				    IEEE_ID=cJSON_GetObjectItem(nodeitem,"IEEE")->valuestring;
-				    memcpy(node_table[i].IEEE,IEEE_ID,strlen(IEEE_ID));
-					printf("IEEE=%s\n",node_table[i].IEEE);
-
-					EnergyNode_ID=cJSON_GetObjectItem(nodeitem,"EnergyNodeID")->valuestring;
-					memcpy(node_table[i].EnergyNodeID,EnergyNode_ID,strlen(EnergyNode_ID));
-					printf("EnergyNodeID=%s\n",node_table[i].EnergyNodeID);
-
-					TermList=cJSON_GetObjectItem(nodeitem,"TermList");
-					term_num=cJSON_GetArraySize(TermList);
-					Term_Num[i]=term_num;
-					if(term_num)
-					 {
-					  for(j=0;j<term_num;j++)
-						{
-						      termitem=cJSON_GetArrayItem(TermList,j);
-							   
-							   Term_Code=cJSON_GetObjectItem(termitem,"TermCode")->valuestring;
-							   termlen=strlen(Term_Code);
-
-							   if(termlen>2*TERM_LEN)
-							   {
-								   printf("TERM LEN error\n");
-							   }
-							   else
-							   {
-
-								 sscanf(Term_Code, "%2x %2x %2x %2x %2x %2x ",&tmp_code[0], &tmp_code[1], &tmp_code[2], &tmp_code[3], &tmp_code[4], &tmp_code[5]);
-
-								 memcpy(node_table[i].term_table[j].TermCode,tmp_code,TERM_LEN);
-								 printf("TermCode=\n");
-								 for(k=0;k<TERM_LEN;k++)
-								 { printf("%02x",node_table[i].term_table[j].TermCode[k]);}
-								 printf("\n");
-
-							     }
-
-
-							   node_table[i].term_table[j].TermType=cJSON_GetObjectItem(termitem,"TermType")->valueint;
-							   printf("TermType=%d\n",node_table[i].term_table[j].TermType);
-
-							   Term_Info=cJSON_GetObjectItem(termitem, "TermInfo")->valuestring;
-							   memcpy(node_table[i].term_table[j].TermInfo,Term_Info,strlen(Term_Info));
-							   printf("Term_Info=%s\n",node_table[i].term_table[j].TermInfo);
-
-							   node_table[i].term_table[j].TermPeriod=cJSON_GetObjectItem(termitem, "TermPeriod")->valueint;
-							   printf("TermPeriod=%d\n",node_table[i].term_table[j].TermPeriod);
-
-							   }
-						   }
-					   }
-				   }
-				   
-			  }
-
-			   package_json_client(ConfigAckMsg,sn,tmp_socket);  //发送配置下发响应消息
-
-			   server_msg.mtype=0;
-              // memset(server_msg.mtext,0,MAXBUF);
-
-			   server_msg.mtype=ConfigReportMsg;
-			   printf("server_msg.mtype=%04x",server_msg.mtype);
-			  // memcpy(server_msg.mtext,text,textlen);
-			  // printf("server_msg.mtext=");
-			  // for(i=0;i<textlen;i++)
-			  // {
-				//  printf("%02x",server_msg.mtext[i]);
-			  // }
-			 //  printf("\n");
-               msgsnd(MsgserverTxId, &server_msg, sizeof(msgform),0);  //向服务器发送配置上报消息
-			   break;
-			 case ConfigQueMsg: //收到配置查询消息
-			   package_json_client(ConfigQueAckMsg,sn,tmp_socket);	//发送配置查询响应消息
-			   break;
-			 case TermQueMsg: //收到表读数查询消息
-				term_msg.mtype=0x0000;
-			    memset(term_msg.mtext,0,MAXBUF);
-				Client_Sn=sn;
-			    Client_Socket=tmp_socket;
-			    IEEE_ID=cJSON_GetObjectItem(root,"IEEE")->valuestring;
-			    EnergyNode_ID=cJSON_GetObjectItem(root,"EnergyNodeID")->valuestring;
-                Term_Code=cJSON_GetObjectItem(root,"TermCode")->valuestring;
-
-                sscanf(Term_Code, "%2x %2x %2x %2x %2x %2x ",&tmp_code[0], &tmp_code[1], &tmp_code[2], &tmp_code[3], &tmp_code[4], &tmp_code[5]);
-
-                term_msg.mtype=client;
-			    memcpy(term_msg.mtext,tmp_code,TERM_LEN);
-			    memcpy(term_msg.mtext+TERM_LEN,EnergyNode_ID,strlen(EnergyNode_ID));
-			    printf("mtext=");
-			    for(i=0;i<(TERM_LEN+strlen(EnergyNode_ID));i++)
-			    {printf("%02x",term_msg.mtext[i]);}
-			    printf("\n");
-                msgsnd(MsgtermTxId,&term_msg,sizeof(msgform),0);
-			    break;
-			 case TermNumReportAckMsg:	//收到表读数上报响应消息
-			   break;
-			 default:break;
-
-			 }
-
-        }
-      cJSON_Delete(root);
-	  return ret;
-}	 
 int detach_interface_msg_client(char *text,int textlen)
 {
 	int status;
@@ -783,17 +623,18 @@ int detach_interface_msg_client(char *text,int textlen)
 	root=cJSON_Parse(text);
 	if (!root)
 	{
-		printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
+		GDGL_DEBUG("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
 		return DETACH_PRASE_ERROR;//need to return immediately 空指针需立即返回
 	}
 	if(cJSON_GetObjectItem(root, "MsgType") == NULL)
 	{
-		printf("msgtype error!\n");
+		GDGL_DEBUG("msgtype error!\n");
 		cJSON_Delete(root);
 		return DETACH_PRASE_ERROR;
 	}
 	msgtype = cJSON_GetObjectItem(root, "MsgType")->valueint;
-	if((msgtype>= 0x10)&&(msgtype<0x70))
+	GDGL_DEBUG("recv client msgtype: %d\n", msgtype);
+	if ((msgtype >= 0x10) && (msgtype < 0x70))
 	{
 		if(msgtype ==0x10)    //this is debug add yan141231
 		{
@@ -820,7 +661,7 @@ int client_msg_handle_security(char *buff, int size, int fd)
 	int cfd = fd;
 	cJSON *sroot;
 	char *sout;
-	int ret;
+	int ret=0;
 
 	root=cJSON_Parse(buff);
 	if(root)
@@ -846,29 +687,39 @@ int client_msg_handle_security(char *buff, int size, int fd)
 int client_msg_handle_in_common(char *buff, int size, int fd)
 {
 	int MsgType;
+	int sn;
 	cJSON *root;
 	int cfd = fd;
 	cJSON *sroot;
-	char *sout;
+	char *sout=NULL;
+	time_t timestamp;
+
+	struct sockaddr_in peerAddr;
+	int peerLen;
+	char ipAddr[INET_ADDRSTRLEN];//保存点分十进制的地址
 
 	root=cJSON_Parse(buff);
 	if(root)
 	{
 		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
+		sn=cJSON_GetObjectItem(root, "Sn")->valueint;
 		sroot=cJSON_CreateObject();
 		switch (MsgType)
 		{
 			case HeartMsg:
 				cJSON_AddNumberToObject(sroot,"MsgType",		MsgType+0x10);
-				cJSON_AddNumberToObject(sroot,"Sn",				10);
+				cJSON_AddNumberToObject(sroot,"Sn",				sn);
+				timestamp=time(NULL);
+				getpeername(cfd, (struct sockaddr *)&peerAddr, &peerLen);
+				GDGL_DEBUG("recv client heartbeat, SOCKET[%d],ADDR[%s],PORT[%d],TIME[%ld]\n",cfd, inet_ntop(AF_INET, &peerAddr.sin_addr, ipAddr, sizeof(ipAddr)), ntohs(peerAddr.sin_port), timestamp);
 				sout=cJSON_PrintUnformatted(sroot);
 				set_heart_beat_client(fd);//add yan 150115
+				send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
+				free(sout);
 				break;
 			default:break;
 		}
-		send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
 		cJSON_Delete(sroot);
-		free(sout);
 		cJSON_Delete(root);
 	}
     return 0;
@@ -892,404 +743,16 @@ void client_msg_handle_in_msgtype_error(char *buff, int size, int fd)
 	free(sout);
 	cJSON_Delete(root);
 }
-void package_json_client(uint8 sendmsgtype,int msg_sn,uint16 tmp_socket)
-{
-    
-    char *out=NULL;
-    
-	cJSON *root;
-	cJSON *TermList=NULL;
-	cJSON* Term=NULL;
-	cJSON *NodeList=NULL;
-	cJSON* node=NULL;
-	char IEEID[INFOLEN]={0};
-	char EnergyNodeID[NODE_LEN]={0};
-	char TermCode[TERM_LEN]={0};
-	char TermInfo[INFOLEN]={0};
-	char *Term_Code=NULL;
-	char  Tmp_Code[TERM_LEN]={0};
-	uint16 net;
-	msgform msg_Rxque;
-	uint8 Rx_msgnum=0;
-//	uint8 termc[TERM_LEN]={0};
-//	uint8 termt;
-//	uint32 termd;
-	uint8 i,j;
-	TxMsg *Term_TxMsg=NULL ;
-    uint8 Tmp_Buf[MAXBUF]={0};
-    char *term_code=NULL;
 
 
-    root=cJSON_CreateObject();	
-    switch(sendmsgtype)
-   	{
-       case HeartAckMsg:    //发送心跳响应消息
-            cJSON_AddNumberToObject(root,"MsgType", HeartAckMsg);
-            cJSON_AddNumberToObject(root,"Sn",msg_sn);
-
-			out=cJSON_PrintUnformatted(root); 
-            cJSON_Delete(root);
-             printf("out=%s\n",out);
-			net=send(tmp_socket,out, strlen(out),MSG_DONTWAIT);
-            break;
-	   case ConfigAckMsg:  //发送表配置响应消息
-
-            cJSON_AddNumberToObject(root,"MsgType", ConfigAckMsg);
-            cJSON_AddNumberToObject(root,"Sn",msg_sn);
-
-			out=cJSON_PrintUnformatted(root); 
-			cJSON_Delete(root);
-			net=send(tmp_socket,out, strlen(out),MSG_DONTWAIT);
-		    break;
-
-	  case ConfigQueAckMsg: //发送表配置查询响应消息
-
-            cJSON_AddNumberToObject(root,"MsgType", ConfigQueAckMsg);
-            cJSON_AddNumberToObject(root,"Sn",msg_sn);
-			cJSON_AddItemToObject(root,"NodeList",NodeList=cJSON_CreateArray());
-	       for (i=0;i<NODE_NUM;i++)
-	        {
-	    	   cJSON_AddItemToArray(NodeList, node = cJSON_CreateObject());
-	    	   memcpy(IEEID,node_table[i].IEEE,sizeof(node_table[i].IEEE));
-	    	   cJSON_AddItemToObject(node, "IEEE", cJSON_CreateString(IEEID));
-
-	    	   memcpy(EnergyNodeID,node_table[i].EnergyNodeID,sizeof(node_table[i].EnergyNodeID));
-	    	   cJSON_AddItemToObject(node, "EnergyNodeID", cJSON_CreateString(EnergyNodeID));
 
 
-	    	   cJSON_AddItemToObject(node, "TermList",TermList= cJSON_CreateArray());
-			   for(j=0;j<TERM_NUM;j++)
-		      {
-				 cJSON_AddItemToArray(TermList, Term= cJSON_CreateObject());
-
-                 memcpy(TermCode,node_table[i].term_table[j].TermCode,TERM_LEN);
-                 sprintf(Tmp_Code,"%02x%02x%02x%02x%02x%02x",TermCode[0],TermCode[1],TermCode[2],TermCode[3],TermCode[4],TermCode[5]);
-                 Term_Code=Tmp_Code;
-                 cJSON_AddItemToObject(Term,"TermCode",cJSON_CreateString(Term_Code));
-
-				 cJSON_AddItemToObject(Term,"TermType",cJSON_CreateNumber(node_table[i].term_table[j].TermType));
-
-				 memcpy(TermInfo,node_table[i].term_table[j].TermInfo,sizeof(node_table[i].term_table[j].TermInfo));
-				 cJSON_AddItemToObject(Term,"TermInfo",cJSON_CreateString(TermInfo));
-
-				 cJSON_AddItemToObject(Term,"TermPeriod",cJSON_CreateNumber(node_table[i].term_table[j].TermPeriod));
-
-	          }
-
-	       	}
-		     
-			out=cJSON_PrintUnformatted(root); 
-            cJSON_Delete(root);
-			net=send(tmp_socket,out, strlen(out),MSG_DONTWAIT);
-	   	    break;
-
-	  case TermQueAckMsg: //发送表读数查询响应消息
-
-            cJSON_AddNumberToObject(root,"MsgType", TermQueAckMsg);
-            cJSON_AddNumberToObject(root,"Sn",msg_sn);
-
-			//cJSON_AddItemToObject(root,"Termdata",Term_data=cJSON_CreateArray());
-
-		    Rx_msgnum=msgrcv(MsgtermRxId,&msg_Rxque,(sizeof(msg_Rxque)-4),0, 0);
-		    printf("Rx_msgnum=%d\n",Rx_msgnum);
-			if(Rx_msgnum!=0)
-			{
-				memcpy(Tmp_Buf,msg_Rxque.mtext,sizeof(msg_Rxque.mtext));
-				Term_TxMsg=(TxMsg *)Tmp_Buf;
-				memcpy(term_code,Term_TxMsg->TermCode,sizeof(Term_TxMsg->TermCode));
-				//term_code=Term_TxMsg->TermCode;
-			   cJSON_AddStringToObject(root,"TermCode",term_code);
-               cJSON_AddNumberToObject(root,"TermType",Term_TxMsg->TermType);
-			   cJSON_AddStringToObject(root,"TermTime",get_systime);
-			   cJSON_AddNumberToObject(root,"ReportData",Term_TxMsg->ReportData);
-
-			   out=cJSON_PrintUnformatted(root);
-               cJSON_Delete(root);
-			   send(tmp_socket,out, strlen(out),MSG_DONTWAIT);
-
-			}
-			else
-			printf("no receive term data");
-	        break;
-	  default:break;
-   	}
-
-}
-
-#if 0
-void parse_json_node(char *text,uint8 textlen)
-{
-
-	cJSON *root ;
-	uint16 msgtype;
-    char *Time=NULL ;
-    char *IEEE=NULL;
-    char *Nwkaddr=NULL;
-    char *EP=NULL;
-    char *data =NULL;
-	uint8 databuf_len;
-	char *Rx_msgbuff=NULL;
-	char *heart_beat=NULL;
-	uint8 heart_buff[11]={"0200070007"};
-    int i,len,rc=0;
-	char *databuf=NULL;
-
-		  Rx_msgbuff=text;
-		  printf("node_Rx_msgbuff=%s\n",Rx_msgbuff);
-		  root=cJSON_Parse(Rx_msgbuff);
-          msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
-          printf("node_msgtype=%d\n",msgtype);
-		  if(msgtype==TERM_MSGTYPE)
-			 {
-			   //printf("AAAAAA\n");
-
-			     Time =cJSON_GetObjectItem(root, "Time")->valuestring;
-			     printf("Time=%s\n",Time);
-
-	             IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring; 
-	             printf("IEEE=%s\n",IEEE);
-
-	             Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
-	             printf("Nwkaddr=%s\n",Nwkaddr);
-
-			     EP=cJSON_GetObjectItem(root, "EP")->valuestring;
-			     printf("EP=%s\n",EP);
-
-                 data=cJSON_GetObjectItem(root, "data")->valuestring;
-                 printf("data=%s\n",data);
-
-	            if(IEEE)
-	          	  {
-	          	  if(data)
-	          	  	{
-	          		  sprintf(get_systime,"%s",Time);
-					  printf("get_systime=%s\n",get_systime);
-
-                      len=strlen(data)/2;
-                      databuf=(char *)malloc(sizeof(char)*len);
-                      printf("databuf= ");
-                      for(i=0;i<len;i++)
-                      {
-                      sscanf(data+i*2,"%02X",databuf+i);
-                      printf("%0X ",databuf[i]);
-                      }
-
-                      databuf_len=len;
-                      printf("databuf_len=%d \n",databuf_len);
-					  unpack_term_msg((uint8*)databuf,databuf_len);
-				    }
-				  else
-				  	{
-                     printf("from node no data\n" );
-				    }
-
-			      }
-			    else
-			      {printf("node return error\n" );}
-
-			 }
-		  else if(msgtype==HEART_MSGTYPE)
-		  {
-			  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
-			  rc=strcmp(heart_beat,heart_buff);
-			  if(rc==0)
-			  {
-				  printf("node heart_ack=%s\n",heart_beat);
-			  }
-			  else
-			  {
-				 printf("node no recv heart ack\n");
-			  }
-		  }
-		cJSON_Delete(root);
-   }
-#endif
-
-//int  parse_json_node(char *text,uint8 textlen)
-//{
-//
-//	cJSON *root ;
-//	int msgtype;
-//    char *Time=NULL ;
-//    char *IEEE=NULL;
-//    char *Nwkaddr=NULL;
-//    char *EP=NULL;
-//    char *data =NULL;
-//	uint8 databuf_len;
-//	char *Rx_msgbuff=NULL;
-//	char *heart_beat=NULL;
-//	//uint8 heart_buff[20]={"0200070007"};
-//    int i=0,len=0,ret=0;
-//	char *databuf=NULL;
-//
-//    Rx_msgbuff=text;
-//    printf("node_Rx_msgbuff=%s\n",Rx_msgbuff);
-//    root=cJSON_Parse(Rx_msgbuff);
-//	if (!root)
-//    {
-//		printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
-//	 //ret = JSON_PARSE_FAILED;
-//	 	return JSON_PARSE_FAILED; //modify yanly141230
-//    }
-//	{
-//		msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
-//		printf("node_msgtype=%d\n",msgtype);
-//		switch(msgtype)
-//        {
-//			case TERM_MSGTYPE:
-////				Time =cJSON_GetObjectItem(root, "Time")->valuestring;
-////				printf("Time=%s\n",Time);
-////				EP=cJSON_GetObjectItem(root, "EP")->valuestring;
-////				printf("EP=%s\n",EP);
-//
-//				IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring;
-//				printf("IEEE=%s\n",IEEE);
-//
-//				Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
-//				printf("Nwkaddr=%s\n",Nwkaddr);
-//
-//				data=cJSON_GetObjectItem(root, "data")->valuestring;
-//				printf("data=%s\n",data);
-//
-//				if(IEEE)
-//				{
-//					if(data)
-//					{
-////						sprintf(get_systime,"%s",Time);
-////						printf("get_systime=%s\n",get_systime);
-//
-//						len=strlen(data)/2;
-//						databuf=(char *)malloc(sizeof(char)*len);
-//						printf("databuf= ");
-//						for(i=0;i<len;i++)
-//						{
-//							sscanf(data+i*2,"%02X",databuf+i);
-//							printf("%0X ",databuf[i]);
-//						}
-//
-//						databuf_len=len;
-//						printf("databuf_len=%d \n",databuf_len);
-//						unpack_term_msg((uint8*)databuf,databuf_len);
-//					}
-//					else
-//					{
-//					  printf("from node no data\n" );
-//					}
-//
-//				}
-//				else
-//				{
-//					printf("node return error\n" );
-//				}
-//				break;
-//
-//			case HEART_MSGTYPE:
-//				return 0;
-////        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
-////
-////        	  printf("node heart_ack=%s\n",heart_beat);
-//				break;
-//			default: break;
-//        }
-//	}
-//		cJSON_Delete(root);
-//		return databuf_len;
-//}
-void parse_json_node(char *text,uint8 textlen)
-{
-
-	cJSON *root ;
-	int msgtype;
-    char *Time=NULL ;
-    char *IEEE=NULL;
-    char *Nwkaddr=NULL;
-    char *EP=NULL;
-    char *data =NULL;
-	uint8 databuf_len;
-	char *Rx_msgbuff=NULL;
-	char *heart_beat=NULL;
-	//uint8 heart_buff[20]={"0200070007"};
-    int i=0,len=0,ret=0;
-	char *databuf=NULL;
-
-    Rx_msgbuff=text;
-    printf("node_Rx_msgbuff=%s\n",Rx_msgbuff);
-    root=cJSON_Parse(Rx_msgbuff);
-	if (!root)
-    {
-	 printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
-	 ret = JSON_PARSE_FAILED;
-    }
-	{
-          msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
-          printf("node_msgtype=%d\n",msgtype);
-          switch(msgtype)
-          {
-          case TERM_MSGTYPE:
-			     Time =cJSON_GetObjectItem(root, "Time")->valuestring;
-			     printf("Time=%s\n",Time);
-
-	             IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring;
-	             printf("IEEE=%s\n",IEEE);
-
-	             Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
-	             printf("Nwkaddr=%s\n",Nwkaddr);
-
-			     EP=cJSON_GetObjectItem(root, "EP")->valuestring;
-			     printf("EP=%s\n",EP);
-
-              data=cJSON_GetObjectItem(root, "data")->valuestring;
-              printf("data=%s\n",data);
-
-	         if(IEEE)
-	          {
-	          	 if(data)
-	          	 {
-	          		sprintf(get_systime,"%s",Time);
-					printf("get_systime=%s\n",get_systime);
-
-                   len=strlen(data)/2;
-                   databuf=(char *)malloc(sizeof(char)*len);
-                   printf("databuf= ");
-                   for(i=0;i<len;i++)
-                   {
-                   sscanf(data+i*2,"%02X",databuf+i);
-                   printf("%0X ",databuf[i]);
-                   }
-
-                   databuf_len=len;
-                   printf("databuf_len=%d \n",databuf_len);
-				   unpack_term_msg((uint8*)databuf,databuf_len);
-				   }
-				  else
-				  {
-                      printf("from node no data\n" );
-				  }
-
-			    }
-			  else
-			  {printf("node return error\n" );}
-	         break;
-
-          case HEART_MSGTYPE:
-
-        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
-
-        	  printf("node heart_ack=%s\n",heart_beat);
-        	  break;
-          default: break;
-          }
-	   }
-		cJSON_Delete(root);
-		return;
-
-   }
 /****************************************************************************************/
 int detach_5002_message22(char *text, int textlen)
 {
 	cJSON *root=NULL;
 	int msgtype;
-    char *ieee;
+    char *ieee=NULL;
 
 	char **data=NULL;
 	int col,row;
@@ -1303,6 +766,7 @@ int detach_5002_message22(char *text, int textlen)
 	 	return DETACH_PRASE_ERROR;
     }
 	msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+	GDGL_DEBUG("receive 5018 [size=%d], mestype=%d\n", textlen, msgtype);
 	if(msgtype != TERM_MSGTYPE)
 	{
 		if((msgtype == ANNCE_CALLBACK)||(msgtype == GLOBAL_ARM))
@@ -1389,7 +853,7 @@ int parse_json_node_security(char *text,int textlen)
 				//之前没有修改前一直会出现malloc(): memory corruption (fast)的问题；具体触发原因不详，猜测databuf_len传入有问题？！
 				if(databuf ==NULL)
 				{
-					printf("malloc fail!\n");
+					GDGL_DEBUG("malloc fail!\n");
 				}
 				//printf("databuf= ");
 				for(i=0;i<databuf_len;i++)
@@ -1404,86 +868,119 @@ int parse_json_node_security(char *text,int textlen)
 				switch (command_num)
 				{
 					case 0x00://传感器上传的
-						printf("callback: upload sensor change\n");
+						GDGL_DEBUG("callback: upload sensor change\n");
 						sensornum = databuf[databuf_len-2];
 						sensorstatus = databuf[databuf_len-1];
 						//响应给节点
 						upload_sensor_change_respond(Nwkaddr, sensornum, databuf_len);
 						//从数据库中查询布撤防状态，看是否需要上传传感器变化状态 //add yanly150107
-						char q_sql[128];int qrow,qcol;char **qopr;int opt;char qcnt;
-						for(qcnt=0;qcnt<2;qcnt++)
-						{
-							if(qcnt==0)
-								sprintf(q_sql, "select operator from stable where ieee = 'global operator'");
-							if(qcnt==1)
-								sprintf(q_sql, "select operator from stable where ieee = '%s' "
-										"and type=%d and num=%d",IEEE,SECURITY_SENSOR_TYPE,sensornum);
+						char q_sql[128];int qrow,qcol;char **qopr;int opt;//char qcnt;
+//						for(qcnt=0;qcnt<2;qcnt++)
+//						{
+//							if(qcnt==0) {
+//								if(global_operator ==1)
+//									qcnt=1;
+//							}
+//							if(qcnt==1)
+//								sprintf(q_sql, "select operator from stable where ieee = '%s' "
+//										"and type=%d and num=%d",IEEE,SECURITY_SENSOR_TYPE,sensornum);
+//							qopr = sqlite_query_msg(&qrow, &qcol, q_sql);
+//							if(qopr!=NULL)
+//							{
+//								opt = atoi(qopr[qcol]);
+//								if(opt==OPERATER_OPEN)
+//								{
+//								}
+//								else
+//								{
+//									printf("ieee operator is not set \n");
+//									qopr = NULL;
+//									break;
+//								}
+//							}
+//							else
+//							{
+//								printf("ieee  operator is null\n");
+//								break;
+//							}
+//						}
+						/**********/
+						if(global_operator ==1) {
+
+							sprintf(q_sql, "select operator from stable where ieee = '%s' "
+									"and type=%d and num=%d",IEEE,SECURITY_SENSOR_TYPE,sensornum);
 							qopr = sqlite_query_msg(&qrow, &qcol, q_sql);
 							if(qopr!=NULL)
 							{
 								opt = atoi(qopr[qcol]);
 								if(opt==OPERATER_OPEN)
 								{
+									if(sensorstatus == SENSOR_STATUS_ALARM)
+									{//控制报警器
+										//http_ctrl_iasWarningDeviceOperation(WARNING_DEVICE_IEEE);
+										http_ctrl_start_alarm();
+										GDGL_DEBUG("alarm upload\n");
+										cJSON_AddNumberToObject(sroot,"MsgType",				118);
+										cJSON_AddNumberToObject(sroot,"Sn",						10);
+										cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+										cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+										cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
+										cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
+										sout = cJSON_PrintUnformatted(sroot);
+										s_len = strlen(sout);
+										//发送给所有在线客户端
+										send_msg_to_all_client(sout, s_len);
+										//发送给云代理服务器  141230
+										#ifdef USE_SERVER_THREAD
+										cJSON_ReplaceItemInObject(sroot, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_SENSOR_UPLOAD_MSG));
+										sout = cJSON_PrintUnformatted(sroot);
+										json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
+										#endif
+										free(sout);
+									}
 								}
-								else
-								{
-									//sqlite_free_query_result(qopr);
-									printf("ieee operator is not set \n");
-									qopr = NULL;
-									break;
-								}
 							}
-							else
-							{
-								//sqlite_free_query_result(qopr);
-								printf("ieee  operator is null\n");
-								break;
-							}
+							sqlite_free_query_result(qopr);
 						}
-						if(qopr!=NULL)
-						{
-							//printf("format correct>>");
-
-							if(sensorstatus == SENSOR_STATUS_ALARM)
-							{//控制报警器
-								http_ctrl_iasWarningDeviceOperation(WARNING_DEVICE_IEEE);
-
-								cJSON_AddNumberToObject(sroot,"MsgType",				118);
-								cJSON_AddNumberToObject(sroot,"Sn",						10);
-								cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
-								cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
-								cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
-								cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
-								sout = cJSON_PrintUnformatted(sroot);
-								s_len = strlen(sout);
-								//发送给所有在线客户端
-								send_msg_to_all_client(sout, s_len);
-								//发送给云代理服务器  141230
-								#ifdef USE_SERVER_THREAD
-								cJSON_ReplaceItemInObject(sroot, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_SENSOR_UPLOAD_MSG));
-								sout = cJSON_PrintUnformatted(sroot);
-								json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
-								#endif
-								free(sout);
-							}
-							else
-							{
-								printf("not need upload sensor,sensor status is normal\n");//传感器变成正常no need send
-							}
-
-						}
-						else
-						{
-							//printf("uneable to upload sensor>>");
-						}
-						sqlite_free_query_result(qopr);
+						/**********/
+//						if(qopr!=NULL)
+//						{
+//							if(sensorstatus == SENSOR_STATUS_ALARM)
+//							{//控制报警器
+//								http_ctrl_iasWarningDeviceOperation(WARNING_DEVICE_IEEE);
+//
+//								cJSON_AddNumberToObject(sroot,"MsgType",				118);
+//								cJSON_AddNumberToObject(sroot,"Sn",						10);
+//								cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
+//								cJSON_AddStringToObject(sroot,"Nwkaddr",				Nwkaddr);
+//								cJSON_AddNumberToObject(sroot,"SensorNum",				sensornum);
+//								cJSON_AddNumberToObject(sroot,"SensorStatus",			sensorstatus);
+//								sout = cJSON_PrintUnformatted(sroot);
+//								s_len = strlen(sout);
+//								//发送给所有在线客户端
+//								send_msg_to_all_client(sout, s_len);
+//								//发送给云代理服务器  141230
+//								#ifdef USE_SERVER_THREAD
+//								cJSON_ReplaceItemInObject(sroot, "MsgType", cJSON_CreateNumber(SERVER_SECURITY_SENSOR_UPLOAD_MSG));
+//								sout = cJSON_PrintUnformatted(sroot);
+//								json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
+//								#endif
+//								free(sout);
+//							}
+//							else
+//							{
+//								printf("not need upload sensor,sensor status is normal\n");//传感器变成正常no need send
+//							}
+//
+//						}
+//						sqlite_free_query_result(qopr);
 						break;
 					case 0x01://控制智能插座的响应
-						printf("callback: appliance switch be controled respond, ");
+						GDGL_DEBUG("callback: switch control respond\n");
 						cmd_respond_status = databuf[9];
 						if(cmd_respond_status !=SECURITY_SERIAL_RESPOND_STATUS_SUCCESS)
 						{
-							printf("respond status error\n");
+							GDGL_DEBUG("control switch respond status error\n");
 						}
 						else
 						{
@@ -1496,7 +993,7 @@ int parse_json_node_security(char *text,int textlen)
 							if(sqlite_updata_msg(sql) == 0)
 							{}
 							else{
-
+								GDGL_DEBUG("switch change upload\n");
 								cJSON_AddNumberToObject(sroot,"MsgType",				SECURITY_SWITCH_UPLOAD_MSG);
 								cJSON_AddNumberToObject(sroot,"Sn",						10);
 								cJSON_AddStringToObject(sroot,"SecurityNodeID",		IEEE);
@@ -1520,11 +1017,11 @@ int parse_json_node_security(char *text,int textlen)
 						break;
 
 					case 0x02:
-						printf("respond after the client control switch >>");
+						GDGL_DEBUG("callback: request switch status\n");
 						cmd_respond_status = databuf[9];
 						if(cmd_respond_status !=0)
 						{
-							printf("serial data format error>>");
+							GDGL_DEBUG("serial data format error\n");
 						}
 						else
 						{
@@ -1568,7 +1065,7 @@ int parse_json_node_security(char *text,int textlen)
 }
 /*
  * 设备节点重新上电产生的callback处理,如果在配置表内唤醒该节点;
- * 全局布防的callback处理;
+ * 全局布防的callback处理,取消全局布撤防状态写进数据库，取消发送给服务器 modify by yanly150512;
  *
  * */
 void origin_callback_handle(char *text,int textlen)
@@ -1599,7 +1096,7 @@ void origin_callback_handle(char *text,int textlen)
 			if(data!= NULL)
 			{
 				send_data_to_dev_security(data[col], "wake up",8);
-				printf("nwkaddr:%s\n",data[col]);
+//				printf("nwkaddr:%s\n",data[col]);
 
 			}
 			sqlite_free_query_result(data);
@@ -1612,46 +1109,44 @@ void origin_callback_handle(char *text,int textlen)
 				return;
 			char *status;
 			char *or_s[2] ={"ArmAllZone","DisArm"};
-			char i;
 			status = cJSON_GetObjectItem(root, "status")->valuestring;
-//			printf("status:%s\n",status);
-//			printf("or_s0:%s\n",or_s[0]);
-//			printf("or_s1:%s\n",or_s[1]);
 			if(strcmp(status, or_s[0]) == 0){
-				//插入数据库
-				printf("set ArmAllZone\n");
-				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",1,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				if(sqlite_updata_msg(sql) ==0){
-					exit(1);
-				}
-				i =1;
+				set_global_opertor_status(1);
+//				//插入数据库
+//				printf("set ArmAllZone\n");
+//				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",1,GLOBAL_OPERATOR_IN_IEEE_NAME);
+//				if(sqlite_updata_msg(sql) ==0){
+//					exit(1);
+//				}
+//				i =1;
 			}
 			else if(strcmp(status, or_s[1]) == 0){
-				printf("set disarm\n");
-				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",2,GLOBAL_OPERATOR_IN_IEEE_NAME);
-				if(sqlite_updata_msg(sql) ==0){
-					exit(1);
-				}
-				i =2;
+				set_global_opertor_status(2);
+//				printf("set disarm\n");
+//				sprintf(sql,"UPDATE stable SET operator = %d WHERE ieee = '%s'",2,GLOBAL_OPERATOR_IN_IEEE_NAME);
+//				if(sqlite_updata_msg(sql) ==0){
+//					exit(1);
+//				}
+//				i =2;
 			}
 			else{
 				cJSON_Delete(root);
-				printf("GLOBAL_ARM string error\n");
+				GDGL_DEBUG("GLOBAL_ARM string error\n");
 				return;
 			}
 			//发送全局布撤防命令到服务器
-#ifdef USE_SERVER_THREAD
-			cJSON *sroot;
-			char *sout;
-			sroot=cJSON_CreateObject();
-			cJSON_AddNumberToObject(sroot,"MsgType",				SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG);
-			cJSON_AddNumberToObject(sroot,"Sn",						10);
-			cJSON_AddNumberToObject(sroot,"OperatorType",			i);
-			sout = cJSON_PrintUnformatted(sroot);
-			json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
-			cJSON_Delete(sroot);
-			free(sout);
-#endif
+//#ifdef USE_SERVER_THREAD
+//			cJSON *sroot;
+//			char *sout;
+//			sroot=cJSON_CreateObject();
+//			cJSON_AddNumberToObject(sroot,"MsgType",				SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG);
+//			cJSON_AddNumberToObject(sroot,"Sn",						10);
+//			cJSON_AddNumberToObject(sroot,"OperatorType",			i);
+//			sout = cJSON_PrintUnformatted(sroot);
+//			json_msgsnd(MsgserverTxId, SERVER_SECURITY_SENSOR_UPLOAD_MSG, sout, strlen(sout));
+//			cJSON_Delete(sroot);
+//			free(sout);
+//#endif
 			break;
 	}
 	cJSON_Delete(root);
@@ -1672,143 +1167,97 @@ int parse_received_server_msg(char *text)
 	if(cJSON_GetObjectItem(root,"MsgType") ==NULL)
 		return JSON_KEY_ERROR;
 	msgtype=cJSON_GetObjectItem(root,"MsgType")->valueint;
-	printf("received server MsgType:%d\n",msgtype);
+	GDGL_DEBUG("received server MsgType=%d, [size=%d]\n", msgtype, strlen(text));
+	switch(msgtype)
+	{
+	 case ConfigReportAckMsg:
+		 //ConfigReportMsg_flag=1;
+		 GDGL_DEBUG("receive ConfigReportAckMsg success \r\n");
+		 break;
+	 case TermDataReportAckMsg:
+		// TermDataReportMsg_flag=1;
+		 GDGL_DEBUG("receive TermDataReportAckMsg success \r\n");
+		 break;
+	 case HeartReportAckMsg:
+	 		// TermDataReportMsg_flag=1;
+		 GDGL_DEBUG("receive HeartReportAckMsg success \r\n");
+	    break;
+	 default:break;
+	}
+
+
 	cJSON_Delete(root);
 	return 1;
 }
-/*********************************************************/
-void parse_json_server(char *text,uint8 textlen)
+/*
+ * 解析上传服务器的数据，加上uploadtime字段再上传
+ *
+ * */
+int add_time_field_in_upload_server_msg(char *newbuf, const char *oldbuf)
 {
-	 cJSON* root = NULL;
-	 uint8 msgtype=0;
-	 char *Rx_msgbuff=NULL;
+	cJSON *root;
+    char *out;
+    int nwrite;
+	time_t timestamp;
 
-	 Rx_msgbuff=text;
-	 printf("Rx_msgbuff=%s\r\n",Rx_msgbuff);
-     root=cJSON_Parse(Rx_msgbuff);
-
-     msgtype=cJSON_GetObjectItem(root,"MsgType")->valueint;
-     printf("msgtype=%02x\r\n",msgtype);
-	 server_sn=cJSON_GetObjectItem(root,"Sn")->valueint;
-	 printf("server_sn=%02x\r\n",server_sn);
-	if(msgtype==ConfigReportAckMsg)
-	 {
-	      printf("receive ConfigReportAckMsg success \r\n");
-     }
-    else
-     {
-    	if(msgtype==TermDataReportAckMsg)
-	     {
-	      printf("receive TermDataReportAckMsg success \r\n");
-	     }
-    	else if(msgtype==HeartReportAckMsg)
-    	{
-    	  printf("receive heartReportAckMsg success \r\n");
-        }
-     }
-
-
-	cJSON_Delete(root);
-    return;
-}
-
-void package_json_server(msgform *msg_Rxque ,uint8 Rx_msgnum,uint16 socketflg)
-{
-  msgform msgRxque;
-  char *out;
-  uint8 msg_type;
-  cJSON* root = NULL;
-  cJSON* TermList;
-  cJSON* Term;
-  uint8 termc[TERM_LEN]={0};
-  uint8 termt;
-  uint32 termd;
-  char buffer[MAXBUF]={0};
-  uint8 recbytes;
-  uint16 Rx_msgtype;
-  uint8 i,j,k;
-  uint8 tmp_buf[TERM_LEN*2]={0};
-  TxMsg *Term_TxMsg;
-
-  printf("msgRxque.mtype=%04x\n",msg_Rxque->mtype);
-  msg_type= (uint8)(msg_Rxque->mtype);
-  printf("msg_type=%02x\n",msg_type);
-
-  switch(msg_type)
-    {
-            
-      case ConfigReportMsg:
-
-            printf("server ConfigReportMsg\n");
-			root=cJSON_CreateObject();
-            cJSON_AddNumberToObject(root,"MsgType", ConfigReportMsg);
-            cJSON_AddNumberToObject(root,"Sn",server_sn);
-			cJSON_AddStringToObject(root,"GatewayID",GatewayID);
-			
-			cJSON_AddItemToObject(root,"TermList",TermList=cJSON_CreateArray());
-			
-			cJSON_AddItemToArray(TermList, Term = cJSON_CreateObject());
-			
-
-			for (i=0;i<NODE_NUM;i++)
-	        {
-			
-			 for(j=0;j<Term_Num[i];j++)
-			 
-		      {
-				 for (k=0;k<TERM_LEN;k++)
-				 {sprintf(tmp_buf+k*2,"%02X",node_table[i].term_table[j].TermCode[k]);}
-				 printf("[%s]\n",tmp_buf);
-
-		        cJSON_AddItemToObject(Term,"TermCode", cJSON_CreateString((const char *)tmp_buf));
-		        cJSON_AddItemToObject(Term,"TermType", cJSON_CreateNumber(node_table[i].term_table[j].TermType));
-		        cJSON_AddItemToObject(Term,"TermInfo", cJSON_CreateString((const char *)node_table[i].term_table[j].TermInfo));
-		        //cJSON_AddItemToObject(Term,"Term_Period", cJSON_CreateNumber(node_table[i].term_table[j].TermPeriod));
-		      }
-
-	       	}
-									
-			out=cJSON_PrintUnformatted(root); 
-            cJSON_Delete(root);
-            send(socketflg,out, strlen(out),MSG_DONTWAIT);
-			break;
-			
-      case TermDataReportMsg:
-
-	        printf("server TermDataReportMsg\n");
-			root=cJSON_CreateObject();
-            cJSON_AddNumberToObject(root,"MsgType", TermDataReportMsg);
-            cJSON_AddNumberToObject(root,"Sn",server_sn);
-            memcpy(buffer,msg_Rxque->mtext,sizeof(msg_Rxque->mtext));
-            Term_TxMsg=(TxMsg*)buffer;
-
-            for (k=0;k<TERM_LEN;k++)
-            {sprintf(termc+k*2,"%02X",Term_TxMsg->TermCode[k]);}
-             printf("[termc=%s]\n",termc);
-
-
-               cJSON_AddStringToObject(root,"TermCode",(char*)termc);
-               cJSON_AddNumberToObject(root,"TermType",Term_TxMsg->TermType);
-               printf("get_systime=%s",get_systime);
-			   cJSON_AddStringToObject(root,"TermTime ",get_systime);
-			   cJSON_AddNumberToObject(root,"ReportData",Term_TxMsg->ReportData);
-									
-			   out=cJSON_PrintUnformatted(root); 
-               cJSON_Delete(root);
-			   send(socketflg,out, strlen(out),MSG_DONTWAIT);
-
-              break;
-
-	  default :break;
-   }
-				
-  return;
+	timestamp = time(NULL);
+	root=cJSON_Parse(oldbuf);
+	if(!root)
+	{
+		printf("parse failed\n");
+		cJSON_Delete(root);
+		return -1;
+	}
+	cJSON_AddNumberToObject(root, "uploadtime", timestamp);
+    if((out = cJSON_PrintUnformatted(root)) == 0 ){
+    	printf("print cjson failed\n");
+		cJSON_Delete(root);
+		return -1;
+    }
+    nwrite = snprintf(newbuf, 2048, "%s", out);
+    nwrite = nwrite+1; // 加上结束符'\0'
+    cJSON_Delete(root);
+	free(out);
+    return nwrite;
 }
 /*
  * fun:发送数据队列到服务器线程
  * add yan150119
  * */
 void json_msgsnd(int id, int type, char *buff, int buff_size) //add yan150119
+{
+	msgform msend;
+	int res;
+	char new_buff[MAX_MSG_BUF]={0};
+	int new_write;
+//	GDGL_DEBUG("send msgsnd to server pthread, MSGTYPE[%d]\n", type);
+	new_write = add_time_field_in_upload_server_msg(new_buff, buff);
+	if(new_write > MAX_MSG_BUF){
+		printf("msgsnd error: send size > MAX_MSG_BUF !\n");
+		return;
+	}
+	msend.mtype = type;
+	memcpy(msend.mtext, new_buff, new_write);
+//	res = msgsnd(id, &msend, new_write, 0);  //flag为0：如果消息队列已满，会一直阻塞等待，该进程会停止在这里。
+	res = msgsnd(id, &msend, new_write, IPC_NOWAIT);
+	GDGL_DEBUG("send msgsnd to server pthread, MSGTYPE[%d]\n", type);
+	if(res <0)
+	{
+		printf("msgsnd failed, errno=%d\n",errno);
+		exit(1);
+	}
+	memset(msend.mtext,0,sizeof(msend.mtext));
+	buff=NULL;
+
+}
+
+
+
+/*******************yang  add**************************************************************/
+/******************************************************************************************/
+/******************************************************************************************/
+
+void json_msgsndclient(int id, int type, char *buff, int buff_size) //add yang
 {
 	msgform msend;
 
@@ -1818,8 +1267,437 @@ void json_msgsnd(int id, int type, char *buff, int buff_size) //add yan150119
 	}
 	msend.mtype = type;
 	memcpy(msend.mtext, buff, buff_size);
-	msgsnd(MsgserverTxId, &msend, buff_size, 0);
+	msgsnd(id, &msend, buff_size, 0);
+	memset(msend.mtext,0,sizeof(msend.mtext));
+	buff=NULL;
+}
+
+int client_msg_handle_energy(char *text,int textlen,int tmp_socket)
+{
+	int MsgType;
+	cJSON *root;
+	int cfd = tmp_socket;
+	cJSON *sroot;
+	char *sout;
+	int ret;
+
+	root=cJSON_Parse(text);
+	if(root)
+	{
+		MsgType = cJSON_GetObjectItem(root, "MsgType")->valueint;
+		//ret = normalTransaction[MsgType-112](root, cfd);  //handle message normal
+		ret=parse_json_client(MsgType,root,cfd);
+		//respond: when normal set,not request
+		if((ret != JSON_OK))
+		{
+			sroot=cJSON_CreateObject();
+			cJSON_AddNumberToObject(sroot,"MsgType",MsgType+0x10);
+			cJSON_AddNumberToObject(sroot,"Sn",	ret);
+			//cJSON_AddNumberToObject(sroot,"respond_status",				ret);
+			sout=cJSON_PrintUnformatted(sroot);
+			send_msg_to_client(sout,strlen(sout),cfd);  //tcp send respond
+			cJSON_Delete(sroot);
+			free(sout);
+		}
+	}
+    cJSON_Delete(root);
+    return ret;
 }
 
 
+int msghandle_energy_config(cJSON *root, int fd)
+ //int msghandle_security_config(cJSON *root, int fd)
+{
+	cJSON *_root = root;
+	cJSON *NodeList_array, *NodeList_item;	int node_cnt;
+	cJSON *SubNode_array, *SubNode_item;	int subnode_cnt;
+	char *SecurityNodeID;
+	char *Nwkaddr;
+//	char opt;
+	int i,j;
+	//
+	term_list *subnod;
+
+	GDGL_DEBUG("set energy config\n");
+	////////////////////////////////////////////////////////////////////////////////预取json异常处理
+	{
+//		if((cJSON_GetObjectItem(_root, "GlobalOpt")) == NULL)
+//		{
+//			return JSON_KEY_ERROR;
+//		}
+		if( (NodeList_array = cJSON_GetObjectItem(_root, "NodeList")) == NULL)
+		{
+			return JSON_KEY_ERROR;
+		}
+		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
+		for(i=0;i<node_cnt;i++)
+		{
+			if((NodeList_item = cJSON_GetArrayItem(NodeList_array,i)) == NULL)
+			{
+				return JSON_KEY_ERROR;
+			}
+			if((cJSON_GetObjectItem(NodeList_item,"IEEE") == NULL)||
+					(cJSON_GetObjectItem(NodeList_item,"Nwkaddr")==NULL) ||
+					((SubNode_array = cJSON_GetObjectItem (NodeList_item, "TermList"))==NULL)
+					)
+			{
+				return JSON_KEY_ERROR;
+			}
+			subnode_cnt = cJSON_GetArraySize (SubNode_array); //获取数组的大小
+			for(j=0;j<subnode_cnt;j++)
+			{
+				if((SubNode_item = cJSON_GetArrayItem(SubNode_array,j)) == NULL)
+				{
+					return JSON_KEY_ERROR;
+				}
+				if((cJSON_GetObjectItem(SubNode_item, "TermCode")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item, "TermType")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item, "TermInfo")==NULL)||
+						(cJSON_GetObjectItem(SubNode_item,"TermPeriod")==NULL))
+				{
+					return JSON_KEY_ERROR;
+				}
+			}
+		}
+	}
+	///////////////////////////////////////////////////////////////////////////////
+	//opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
+	//转发给其他客户端
+	char *out;
+	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(ConfigAckMsg));
+	out = cJSON_PrintUnformatted(_root);
+	send_msg_to_all_client(out, strlen(out));
+	//转发给服务器
+	#ifdef USE_SERVER_THREAD
+	cJSON_ReplaceItemInObject(_root, "MsgType", cJSON_CreateNumber(ConfigReportMsg));
+	out = cJSON_PrintUnformatted(_root);
+	json_msgsnd(MsgserverTxId, ConfigReportMsg, out, strlen(out));
+	#endif
+
+	free(out);
+	//配置更新到数据库
+	//opt = cJSON_GetObjectItem(_root, "GlobalOpt")->valueint;
+	sqlite_delete_allmsg_from_etable();
+	NodeList_array = cJSON_GetObjectItem (_root, "NodeList");
+	//sqlite_updata_global_operator(opt);//配置不更新global operator
+	if(NodeList_array)
+	{
+		node_cnt = cJSON_GetArraySize (NodeList_array ); //获取数组的大小
+		for(i=0;i<node_cnt;i++)
+		{
+			NodeList_item = cJSON_GetArrayItem(NodeList_array,i);
+		    if(NodeList_item)
+		    {
+		    	SecurityNodeID = cJSON_GetObjectItem(NodeList_item,"IEEE")->valuestring;
+		    	Nwkaddr = cJSON_GetObjectItem(NodeList_item,"Nwkaddr")->valuestring;
+		    	//下发任意透传消息给透传节点触发透传节点能上传透传消息
+		    	send_data_to_dev_security(Nwkaddr, "wake up", 8);//add yanly150114
+		    	//printf("ieee:%s,addr:%s\n",SecurityNodeID,Nwkaddr);
+		    	SubNode_array = cJSON_GetObjectItem (NodeList_item, "TermList");
+		    	subnode_cnt = cJSON_GetArraySize (SubNode_array ); //获取数组的大小
+//		    	printf("subnode_cnt=%d==============================\n",subnode_cnt);
+		    	subnod = (term_list *)malloc(subnode_cnt*sizeof(term_list));//malloc //
+		    	if(subnod ==NULL)
+		    	{
+		    		GDGL_DEBUG("malloc fail!\n");
+		    		return MALLOC_ERROR;
+		    	}
+		    	for(j=0;j<subnode_cnt;j++)
+		    	{
+		    		SubNode_item = cJSON_GetArrayItem(SubNode_array,j);
+		    		if(SubNode_item)
+		    		{
+		    			subnod[j].TermCode = cJSON_GetObjectItem(SubNode_item, "TermCode")->valuestring;
+		    			subnod[j].TermType = cJSON_GetObjectItem(SubNode_item, "TermType")->valueint;
+		    			subnod[j].TermInfo= cJSON_GetObjectItem(SubNode_item, "TermInfo")->valuestring;
+		    			subnod[j].TermPeriod= cJSON_GetObjectItem(SubNode_item,"TermPeriod")->valueint;
+		    			//subnod[j].operator = OPERATER_CLOSE;//cJSON_GetObjectItem(SubNode_item, "OperatorType")->valueint;
+//		    			printf("type:%d,subtype:%d,num:%d,info:%s,operator:%d\n",subnod[j].type,
+//		    					subnod[j].subtype,subnod[j].num,subnod[j].info,subnod[j].operator);
+
+                         if(subnod[0].TermPeriod>0)
+		    			 {
+							Term_rcvPeriod=60*subnod[j].TermPeriod;
+							//printf("Term_rcvPeriod=%d\n",Term_rcvPeriod);
+						 }
+						else
+						 {Term_rcvPeriod=TERM_PEIOD;
+							 //printf("Term_rcvPeriod=%d\n",Term_rcvPeriod);
+						 }
+						ModTimer(Term_rcvPeriod,time2);
+
+		    		}
+		    	}
+		    	//handle insert config to database
+		    	if(subnode_cnt >0)  //add yanly150521
+		    	{
+		    		sqlite_insert_energy_config_table(SecurityNodeID, Nwkaddr, subnod, subnode_cnt);//配置更新到数据库
+		    	}
+		    	if(subnod!=NULL)
+		    	{
+		    		free(subnod); //malloc must to free()  //add yanly150521
+		    	}
+		    }
+		}
+	}
+	return JSON_OK;
+}
+
+
+int msghandle_energy_term(cJSON *root, int tmp_socket)
+{
+
+    msgform term_msg;
+
+	char *IEEE_ID=NULL;
+	char *Nwkaddr_ID=NULL;
+	char *Term_Code=NULL;
+
+	char term_len=0;
+	char node_len=0;
+	 if((cJSON_GetObjectItem(root, "IEEE")==NULL)||
+		(cJSON_GetObjectItem(root, "Nwkaddr")==NULL)||
+		(cJSON_GetObjectItem(root, "TermCode")==NULL)||
+		 (cJSON_GetObjectItem(root,"Sn")==NULL))
+	   {
+		      return JSON_KEY_ERROR;
+	   }
+
+
+	                Client_Sn=cJSON_GetObjectItem(root,"Sn")->valueint;
+				    Client_Socket=tmp_socket;
+				    IEEE_ID=cJSON_GetObjectItem(root,"IEEE")->valuestring;
+				    Nwkaddr_ID=cJSON_GetObjectItem(root,"Nwkaddr")->valuestring;
+	                Term_Code=cJSON_GetObjectItem(root,"TermCode")->valuestring;
+
+	                msgfromflg=MsgComClient;
+	               // SendDataToDev((uint8*)Term_Code,(uint8*)Nwkaddr_ID);
+	                term_len=strlen(Term_Code);
+	                node_len=strlen(Nwkaddr_ID);
+
+	                term_msg.mtext[0]=term_len;
+				    memcpy(term_msg.mtext+1,Term_Code,term_len);
+
+				    term_msg.mtext[1+term_len]=node_len;
+				    memcpy(term_msg.mtext+term_len+2,Nwkaddr_ID,node_len);
+
+				    //printf("mtext=%s\n",term_msg.mtext);
+				    json_msgsndclient(MsgtermTxId, TermQueAckMsg, term_msg.mtext, strlen(term_msg.mtext));
+				    memset(term_msg.mtext,0,sizeof(term_msg.mtext));
+	                //msgsnd(MsgtermTxId,&term_msg,strlen(term_msg.mtext),0);
+	                return JSON_OK;
+
+}
+
+int msghandle_ConfigQueAckMsg(int msg_sn,uint16 tmp_socket)
+{
+	char **q_data=NULL;
+	char **ieee=NULL;int ieee_row,ieee_col;
+	int q_row,q_col;int i,j;
+	int index_ieee,index_q;
+	char *sql_req_config = "select ieee,nwkaddr,TermCode,Termtype,TermInfo,TermPeriod from etable where nwkaddr not null";
+	char *sql_req_ieee = "SELECT  DISTINCT ieee,nwkaddr FROM etable where nwkaddr not null";
+    //int ret=0;
+	cJSON *sroot;
+	cJSON *NodeList_array, *NodeList_item;
+	cJSON *SubNodeItem, *SubNodeArray;
+    //int opt ;
+    char *out=NULL;
+   // printf("receive client msg: energy config check\n");
+//query database:
+    q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
+    if(q_data ==NULL)
+    {
+//    	printf("query db error\n");
+    	sqlite_free_query_result(q_data);
+    	return JSON_VALUE_ERROR;
+    }
+    ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
+    if(ieee == NULL)
+    {
+    	printf("query db error\n");
+    	sqlite_free_query_result(ieee);
+    	return JSON_VALUE_ERROR;
+    }
+
+//organize json package
+    sroot = cJSON_CreateObject();
+	cJSON_AddNumberToObject(sroot, "MsgType", ConfigQueAckMsg);
+	cJSON_AddNumberToObject(sroot, "Sn", msg_sn);
+	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item =cJSON_CreateArray());
+	for(i=0;i<ieee_row;i++)
+	{
+		index_ieee = i*ieee_col+ieee_col;//ieee data的每行头
+		cJSON_AddItemToArray(NodeList_item, NodeList_array=cJSON_CreateObject());
+		cJSON_AddStringToObject(NodeList_array, "IEEE", ieee[index_ieee]);
+		cJSON_AddStringToObject(NodeList_array, "Nwkaddr", ieee[index_ieee+1]);
+		cJSON_AddItemToObject(NodeList_array, "TermList", SubNodeItem =cJSON_CreateArray());
+		for(j=0;j<q_row;j++)
+		{
+			index_q = j*q_col + q_col;//data的每行头
+			if(strcmp(q_data[index_q], ieee[index_ieee])==0)
+			{
+				cJSON_AddItemToArray(SubNodeItem, SubNodeArray=cJSON_CreateObject());
+				cJSON_AddStringToObject(SubNodeArray, "TermCode", q_data[index_q+2]);
+				cJSON_AddNumberToObject(SubNodeArray, "TermType", atoi(q_data[index_q+3]));
+				cJSON_AddStringToObject(SubNodeArray, "TermInfo", q_data[index_q+4]);
+				cJSON_AddNumberToObject(SubNodeArray, "TermPeriod", atoi(q_data[index_q+5]));
+
+			}
+
+		}
+	}
+
+	out = cJSON_PrintUnformatted(sroot);
+	//printf("out=%s\n",out);
+    //send msg to client:
+	//printf("send msg to all client>>");
+	send_msg_to_client(out, strlen(out), tmp_socket);
+	//send_msg_to_all_client(out, strlen(out));
+
+	cJSON_Delete(sroot);
+	free(out);
+	sqlite_free_query_result(q_data);
+	sqlite_free_query_result(ieee);
+	return JSON_OK;
+}
+
+int parse_json_client(int msgtype,cJSON *root,int tmp_socket)
+{
+
+
+	int ret;
+	int msg_sn;
+
+   switch(msgtype)
+	{
+
+		     case ConfigMsg: //收到配置下发消息
+
+			  ret=msghandle_energy_config(root,tmp_socket);
+
+			   break;
+			 case ConfigQueMsg: //收到配置查询消息
+				 if(cJSON_GetObjectItem(root, "Sn")==NULL)
+				    {
+					   ret= JSON_KEY_ERROR;
+				    }
+			    msg_sn=cJSON_GetObjectItem(root,"Sn")->valueint;
+			   ret=msghandle_ConfigQueAckMsg(msg_sn,tmp_socket);//发送配置查询响应消息
+			   break;
+			 case TermQueMsg: //收到表读数查询消息
+			   ret= msghandle_energy_term(root,tmp_socket);
+			    break;
+			 case TermNumReportAckMsg:	//收到表读数上报响应消息
+				ret=JSON_OK;
+			   break;
+			 default:break;
+
+			 }
+	  return ret;
+}
+
+
+void parse_json_node(char *text,uint8 textlen)
+{
+
+	cJSON *root =NULL;
+	int msgtype;
+    char *Time=NULL ;
+    char *IEEE=NULL;
+    char *Nwkaddr=NULL;
+    char *EP=NULL;
+    char *data =NULL;
+	uint8 databuf_len=0;
+	char *Rx_msgbuff=NULL;
+	char *heart_beat=NULL;
+	//uint8 heart_buff[20]={"0200070007"};
+    int i=0,len=0,ret=0;
+	//char *databuf=NULL;
+	char databuf[MAXBUF]={0};
+
+    Rx_msgbuff=text;
+    //printf("node_Rx_msgbuff=%s\n",Rx_msgbuff);
+    root=cJSON_Parse(Rx_msgbuff);
+	if (!root)
+    {
+	 printf("****Parse client JSON Error before: %s\n****",cJSON_GetErrorPtr());
+	 ret = JSON_PARSE_FAILED;
+    }
+	{
+          msgtype=cJSON_GetObjectItem(root,"msgtype")->valueint;
+          //printf("node_msgtype=%d\n",msgtype);
+          switch(msgtype)
+          {
+          case TERM_MSGTYPE:
+			     Time =cJSON_GetObjectItem(root, "Time")->valuestring;
+			     //printf("Time=%s\n",Time);
+
+	             IEEE =cJSON_GetObjectItem(root, "IEEE")->valuestring;
+	             //printf("IEEE=%s\n",IEEE);
+
+	             Nwkaddr=cJSON_GetObjectItem(root, "Nwkaddr")->valuestring;
+	             //printf("Nwkaddr=%s\n",Nwkaddr);
+
+			     EP=cJSON_GetObjectItem(root, "EP")->valuestring;
+			     //printf("EP=%s\n",EP);
+
+              data=cJSON_GetObjectItem(root, "data")->valuestring;
+              //printf("data=%s\n",data);
+
+	         if(IEEE)
+	          {
+	          	 if(data)
+	          	 {
+	          		sprintf(get_systime,"%s",Time);
+					printf("get_systime=%s\n",get_systime);
+
+                   len=strlen(data)/2;
+                   //databuf=(char *)malloc(sizeof(char)*len);
+                   printf("databuf=");
+                   for(i=0;i<len;i++)
+                   {
+                   sscanf(data+i*2,"%02X",databuf+i);
+                   printf("%0X ",databuf[i]);
+                   }
+                   printf("\n");
+
+                   databuf_len=len;
+                   printf("databuf_len=%d\n",databuf_len);
+				   unpack_term_msg((uint8*)databuf,databuf_len);
+				   //free(databuf);
+				   }
+				  else
+				  {
+                      printf("from node no data\n" );
+				  }
+
+			    }
+			  else
+			  {printf("node return error\n" );}
+	         break;
+
+          case HEART_MSGTYPE:
+
+        	  heart_beat=cJSON_GetObjectItem(root,"heartbeat")->valuestring;
+
+        	  printf("node heart_ack=%s\n",heart_beat);
+        	  break;
+          default: break;
+          }
+	   }
+		cJSON_Delete(root);
+		return;
+
+   }
+
+
+
+/*设置全局布撤防状态
+ * */
+void set_global_opertor_status(char status)
+{
+	global_operator = status;
+	GDGL_DEBUG("set global_opertor is %d\n", global_operator);
+}
 

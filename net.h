@@ -18,45 +18,11 @@
 #include "user_config.h"
 
 
-//void connect2dvr(void);
 
 
 
-//#define GatewayID  88888888    //���صı��
 
 
-//#define CLIENT_PORT    5030  //��ͻ���ͨ�Ŷ˿�
-////#define NODE_PORT      5018  //��ڵ��豸ͨ�Ŷ˿�
-//#define NODE_PORT      5002  //��ڵ��豸ͨ�Ŷ˿�
-////#define SERVER_PORT    5031  //�������ͨ�Ŷ˿�
-//#define SERVER_PORT    5040  //�������ͨ�Ŷ˿�
-//
-////#define GATEWAY_IPADDR   "192.168.0.102"
-////#define SERVER_IPADDR  "192.168.0.100"
-//#define GATEWAY_IPADDR   "192.168.1.137"
-//#define SERVER_IPADDR  "192.168.1.111"
-//
-//#define MAX_CLIENT_NUM 16   //���ͻ���������
-
-
-//#define NODE_NUM 2
-#define NODE_NUM 2
-#define NODE_LEN 10
-#define IE_LEN   20
-
-//#define TERM_NUM 3
-#define TERM_NUM 2
-#define TERM_LEN 6
-
-#define  INFOLEN 64
-
-typedef struct{
-int client_socket;
-uint16 client_alive;
-uint16 client_count;
-char client_buff[MAXBUF];
-uint16 client_buff_len;
-}client_status;
 
 
 /***********************************************************************/
@@ -72,12 +38,15 @@ uint16 client_buff_len;
 #define	SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG			0x46
 #define	SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG				0x47
 #define SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG				0x48
+#define SERVER_UPLOAD_ALL_ENERGY_CONFIG_MSG					0x49
 
 #define	SERVER_SECURITY_CONFIG_MSG_RES							0x53
 #define	SERVER_SECURITY_SENSOR_UPLOAD_MSG_RES					0x54
 #define	SERVER_SECURITY_SWITCH_UPLOAD_MSG_RES					0x55
 #define	SERVER_SECURITY_UPLOAD_GLOBAL_OPERATOR_MSG_RES			0x56
 #define	SERVER_SECURITY_UPLOAD_DEV_OPERATOR_MSG_RES				0x57
+#define SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG_RES				0x58
+#define SERVER_UPLOAD_ALL_ENERGY_CONFIG_MSG_RES					0x59
 
 
 /***********************************************************************/  //energy
@@ -103,8 +72,8 @@ uint16 client_buff_len;
 #define  TermDataReportMsg    0x42    //表数据上报消息
 #define  TermDataReportAckMsg 0x52    //表数据上报响应消息
 
-#define  HeartReportMsg       0x40    //表数据上报消息
-#define  HeartReportAckMsg    0x50    //表数据上报响应消息
+#define  HeartReportMsg       0x40    //心跳上报消息
+#define  HeartReportAckMsg    0x50    //心跳上报响应消息
 
 
 /***********************************************************************/  //security yanly
@@ -138,75 +107,17 @@ uint16 client_buff_len;
 #define	HEARTBEAT_OK								1
 
 
-#if 1
-
-typedef struct {
-		 
-
-	 uint8  TermCode[TERM_LEN];      //智能表的编号
-	 uint8  TermType;      //智能表的类型
-	 uint8  TermInfo[INFOLEN];      //智能表的描述
-	 uint16 TermPeriod;    //智能表的上报周期
-
-     uint16    CenturyValue;
-     uint16    YearValue;
-     uint16    MouthValue;
-     uint16    DayValue;
-     uint16    HourValue;
-     uint16    MinuteValue;
-     uint16    SecondValue;
-	 uint32     ReportData;
-		
-	}term_list;
-
-
-typedef struct {
-	 uint8 IEEE[INFOLEN];
-     uint8  EnergyNodeID[INFOLEN];
-     term_list term_table[TERM_NUM];
-	}node_list;
-
-#endif
-
-#if 0
-	typedef struct {
-
-
-		 uint8  *TermCode;      //智能表的编号
-		 uint8  TermType;      //智能表的类型
-		 uint8  *TermInfo;      //智能表的描述
-		 uint16 TermPeriod;    //智能表的上报周期
-
-	     uint16    CenturyValue;
-	     uint16    YearValue;
-	     uint16    MouthValue;
-	     uint16    DayValue;
-	     uint16    HourValue;
-	     uint16    MinuteValue;
-	     uint16    SecondValue;
-		 uint32  ReportData;
-
-		}term_list;
-
-
-	typedef struct {
-		 uint8 *EnergyNodeID;
-	     //uint8  EnergyNodeState;
-	     term_list term_table[TERM_NUM];
-		}node_list;
-#endif
-
-
 /*****************************************************************/
 //add yanly141230
 extern int connect_host[MAX_CLIENT_NUM];
+//extern char clientaddr[MAX_CLIENT_NUM][20];
 extern char connect_host_online[MAX_CLIENT_NUM]; //add yan0115
 
 //void ConnectClient();
 extern int ConnectClient();
 extern void get_local_ipaddr();//add yan150112
 //extern void *client_msg_thread(void *p);
-extern void *client_type_thread(void *p);
+extern void *client_term_thread(void *p);
 
 extern void *node_msg_thread(void *p) ;
 extern void *server_msg_thread(void *p);
@@ -221,5 +132,6 @@ extern void *check_client_heartbeat();
 extern void send_msg_to_all_client(char *text, int text_size);
 extern void send_msg_to_client(char *text, int text_size, int fd);
 extern void set_heart_beat_client(int client_fd);
-
+extern void send_all_energy_config_to_server(int fd);
+void send_server_heartbeat();
 #endif

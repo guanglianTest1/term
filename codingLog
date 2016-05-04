@@ -1,3 +1,47 @@
-condig log from yanly!
+codig log from yanly!
 20141226:
 modify client_msg_thread ,open interface for energy and security node.
+
+///////////////////////////////////////////////////////////////////////////////////
+20150512: by yanly
+1. 全局布撤防状态不写进数据库，增加初始化时读取全局布撤防状态；(安防部分)
+2. 上传到服务器数据加uploadtime字段；（服务器要求）
+3. 检测客户端heartbeat线程循环里增加延时，防止编译器优化；
+4. 发现与服务器通信线程没有重连的逻辑；
+//////////////////////////////////////////////////////////////////////////////////
+
+20150513: by yanly
+1. 删除获取本地ip地址的逻辑,获取本地ip地址的逻辑不需要
+2. 加了服务器重连机制
+３．服务器连接断开后不发心跳包；消息队列接收改为非阻塞方式接收，并且优先处理心跳包（因为心跳包实时性）；首次连接服务器，修改发送所有节能配置信息的MsgType值为0x49；
+
+20150514： by yanly
+1. 发送服务器的函数send_msg_to_server修改优化：当发送数据很大时，send发送可能会丢包，改用writen
+2. 打印函数改用GDGL_DEBUG，打印可以定位到具体的打印位置，方便调试。
+3. 首次连接服务器，发送所有节能配置信息时，不用发送global_opertor,已屏蔽。
+
+20150520: by yanly
+1. 发现发送抄表配置为空时，程序崩溃。 配置为空时检验。
+
+20150521: by yanly
+1. 有关定时器的变量，加volatile，防止编译器优化；
+2. msghandle_energy_config函数忘记free到分配的内存；
+3. 抄表数据上传的key出错："TermTime",去掉空格
+4. 修改handle_request函数：写timeout_tv值
+
+20150522: by yanly
+1. term_msg_thread: 加延时2ms，降低cpu使用率；
+2. nodeSocket：加延时1ms，降低cpu使用率；
+
+20150528: by yanly
+1. 初始化时添加延时，因为开机后网络环境未准备好。
+2. 接收client heartbeat时打印地址和端口值；
+
+20150610: by yanly
+1. 连接服务器后，发送所有配置信息：修改抄表配置信息格式不一致的问题，"TermList"；
+
+20150616: by yanly
+1. 发给客户端的数据前面加包：#length#data{source data}; 外网通道模块发送时不加包；
+
+
+

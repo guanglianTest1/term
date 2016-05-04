@@ -16,7 +16,7 @@ typedef unsigned char uint8;
 #define MAX_MSG_BUF			2048
 
 typedef struct {
-	  long mtype;
+	  int mtype;
 	  char mtext[MAX_MSG_BUF];
  }msgform;
 

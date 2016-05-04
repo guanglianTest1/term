@@ -1,15 +1,15 @@
 /***************************************************************************
-  Copyright (C), 2009-2014 GuangdongGuanglian Electronic Technology Co.,Ltd.
-  FileName:      net.cpp
-  Author:        jiang
-  Version :      1.0    
-  Date:          2014-02-27
-  Description:        
-  History:         
-      <author>  <time>   <version >   <desc> 
-***************************************************************************/
-#include<sys/ioctl.h>
-#include<string.h>
+ Copyright (C), 2009-2014 GuangdongGuanglian Electronic Technology Co.,Ltd.
+ FileName:      net.cpp
+ Author:        jiang
+ Version :      1.0
+ Date:          2014-02-27
+ Description:
+ History:
+ <author>  <time>   <version >   <desc>
+ ***************************************************************************/
+#include <sys/ioctl.h>
+#include <string.h>
 #include<stdio.h>
 #include<unistd.h>
 #include<stdlib.h>
@@ -31,8 +31,6 @@
 #include <time.h>
 
 #include <ifaddrs.h>  //add yan150112
-
-
 #include"json.h"
 #include"cJSON.h"
 #include"net.h"
@@ -42,39 +40,31 @@
 #include"sysinit.h"
 #include "appSqlite.h"
 
-
-
-extern int MsgtermTxId; //���ͳ������ݵ���Ϣ����
+//���ͳ������ݵ���Ϣ����
 //extern int MsgtermRxId; //���ܳ������ݵ���Ϣ����
 extern int MsgserverTxId;//���ͷ��������ݵ���Ϣ����
-extern uint8 client_flag;
 
-extern uint8 msgfromflg;
-extern uint8 term_send_flag;
-extern uint8 term_rcv_flag;
-extern uint8 client_send_count;
-extern uint8 server_heart_flag;
-extern uint8 node_heart_flag;
+
+//extern uint8 msgfromflg;
+//extern uint8 term_send_flag;
+//extern uint8 term_rcv_flag;
+//extern uint8 client_send_count;
+//extern volatile uint8 server_heart_flag;
+extern volatile uint8 node_heart_flag;
+extern volatile uint8 client_flag; //add yanly150512
 extern pthread_mutex_t mutex;
 /****************************************************************************/
-uint8 Client_Sn=0;
-int Client_Socket=0;
-uint8 listen_thread_isover=0;
-#if 0
-node_list node_table[NODE_NUM]={
-		                        {"1234567890","ce75",{{{0x00,0x00,0x00,0x11,0x25,0x52},1,"was",60,0,0,0,0,0,0,0,0},{{0x00,0x00,0x12,0x34,0x56,0x78},2,"water",60,0,0,0,0,0,0,0,0},{{0xaa,0x12,0x34,0x56,0x78,0x90},3,"water",60,0,0,0,0,0,0,0,0}}},
-		                        {"1234567890","7436",{{{0x04,0x04,0x04,0x04,0x04,0x04},1,"war",60,0,0,0,0,0,0,0,0},{{0x05,0x05,0x05,0x05,0x05,0x05},2,"water",60,0,0,0,0,0,0,0,0},{{0x06,0x06,0x06,0x06,0x06,0x06},2,"water",60,0,0,0,0,0,0,0,0}}}
-                               };
-uint8 Term_Num[NODE_NUM]={3,3};
-#endif
+uint8 Client_Sn = 0;
+int Client_Socket = 0;
 
-#if 1
-node_list node_table[NODE_NUM]={0};
-uint8 Term_Num[NODE_NUM]={0};
-#endif
-char local_addr[1025];//add yan150112
+uint8 server_heart_sn = 0;
+
+//node_list node_table[NODE_NUM]={0};
+
+
+char local_addr[1025];//add yan150112 delete yanly150513
 /**********************************************************************************************/
-pthread_t thread_do[2];  //pthread id
+pthread_t thread_do[2]; //pthread id
 //int handle_connect(int sockfd);
 //int handle_request();
 //static function
@@ -82,201 +72,44 @@ void *handle_connect(void *argv);
 void *handle_request(void *argv);
 void sig_process(int signo);
 void sig_pipe(int signo);
-static int	connect_to_gateway_init(void);//add yanly141229
-static int send_server_heartbeat(int fd);
+static int connect_to_gateway_init(void);//add yanly141229
+//int send_server_heartbeat(int fd);
 static void close_client(int i);
 static void set_heart_beat(int i, char heart_status);
-void send_msg_to_server(char *text, int text_size, int fd);
+int send_msg_to_server(char *text, int text_size, int fd);
 void send_all_security_config_to_server(int fd);
-
+void parse_receive_servermsg(msgform msg_Rque, int rcv_num, int scfd);
 
 //uint8 node_ip[20]="192.168.0.102";
-client_status client_list[MAX_CLIENT_NUM];
+//client_status client_list[MAX_CLIENT_NUM];
+volatile int server_connected_fd = 0; //add yanly150513 服务器已连接上的标记
 int connect_host[MAX_CLIENT_NUM];//add yanly141229
-char connect_host_online[MAX_CLIENT_NUM] = {HEARTBEAT_NOT_OK}; //add yan150115增加检测心跳包,规定时间内没收到心跳包断开连接
-uint16 client_num=0;   //how many client socket
-//int connect_number = 0;
-
-void client_type_socket()
-{   pthread_t client_type;
-	pthread_create(&client_type,NULL,client_type_thread,NULL);
-}
-void *client_type_thread(void *p)
-{
-  msgform term_msg;
-  uint8 msgsize;
-  uint8 term_code[TERM_LEN]={0};
-  uint8 node_id[NODE_LEN]={0};
-  uint8 i=0;
-  while(1)
-  	{
-#if 1
-     msgsize=msgrcv(MsgtermTxId, &term_msg,sizeof(msgform),0,0);
-     printf("msgsize=%d\n",msgsize);
-	 if((msgsize>0)&&(term_send_flag==enable))
-       {
-		memcpy(term_code,term_msg.mtext,TERM_LEN);
-		printf("client term_code=");
-		for(i=0;i<TERM_LEN;i++)
-		{printf("%02x",term_code[i]);}
-		printf("\n");
-		memcpy(node_id,(term_msg.mtext+TERM_LEN),NODE_LEN);
-		printf("node_id=%s\n",node_id);
-		msgfromflg=MsgComClient;
-		SendDataToDev(term_code,node_id);
-		client_send_count++;
-
-	   }
-     if(client_send_count<=3)
-	   {
-	     if(term_rcv_flag==enable)
-	     	{
-             //oneclient_send_flag=enable;//��ͻ��˷��ͳ�����Ӧ��Ϣ
-			 term_send_flag=enable;
-			 term_rcv_flag=disable;
-			 client_send_count=0;
-			// printf("22222");
-	        }
-	     else
-	     {
-	    	 msgfromflg=MsgComClient;
-	    	 SendDataToDev(term_code,node_id);
-	     }
-
-       }
-	  else
-	   {
-          term_send_flag=enable;
-		  client_send_count=0;
-	   }
+char islocalip_flag[MAX_CLIENT_NUM]={0};
+//char clientaddr[MAX_CLIENT_NUM][20];
+#ifdef PUSH_TO_SERVER_NEW_LOGIC
+int clientfd_local_2_cloudproxy = -1; //add yanly150511
 #endif
+char connect_host_online[MAX_CLIENT_NUM] =
+{ HEARTBEAT_NOT_OK }; //add yan150115增加检测心跳包,规定时间内没收到心跳包断开连接
+uint16 client_num = 0; //how many client socket
+//int connect_number = 0;
+// add by yang 2015319
+uint8 ConfigReportMsg_flag = 0;
+int ConfigReportMsg_count = 0;
 
-
-     if(client_flag==enable)
-     	{
-     	 for(i=0;i<MAX_CLIENT_NUM;i++)
-          {
-
-     		printf("client_count%d=%d\n",i+1,client_list[i].client_count);
-		   if(client_list[i].client_count>0)
-            {
-			  client_list[i].client_count--;
-              client_flag=disable;
-			  //client_list[i].client_alive=online;
-		   	}
-		   else
-		 	{
-             client_list[i].client_alive=offline;
-             client_list[i].client_count=0;
-			 client_flag=disable;
-			 DBG_PRINT("yangguixin5\n");
-			// exit(1);
-		    }
-		   printf("client_status%d=%d\n",i+1,client_list[i].client_alive);
-     	  }
-
-	    }
-
-    }
-  return 0;
-}
-
-
-//void ConnectClient()
-//{
-//	pthread_t client_thread;
-//	pthread_create(&client_thread,NULL,client_msg_thread,NULL);
-//}
-//void *client_msg_thread(void *p)
-//int ConnectClient()
-//{
-//    struct sockaddr_in servaddr;
-//    int s32Rtn;
-//    int s32Socket_value = 1;
-//
-//    unsigned int pTcpPort;
-//    int sockfd;
-////	char receive_buf[MAXBUF];
-////	 int Recvsize_2 = 0;
-//	uint8 i=0;
-//	//pthread_t thread_do[2];
-//	 for(i=0;i<MAX_CLIENT_NUM;i++)
-//	 {
-//		 client_list[i].client_socket=-1;
-//	 }
-//	 signal(SIGINT, sig_process);
-//	 signal(SIGPIPE, sig_pipe);
-//    pTcpPort =CLIENT_PORT;
-//    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-//    if (sockfd == -1)
-//    { perror("client socket error!");}
-//
-////    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &s32Socket_value,sizeof(int)) == -1)
-////    { printf("client set socketopt err!!!!\n");
-////	  goto ERR;
-////    }
-//
-//    memset(&servaddr, 0, sizeof(servaddr));
-//    servaddr.sin_family = AF_INET;
-//    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-//    servaddr.sin_port = htons(pTcpPort);
-//
-//    s32Rtn = bind(sockfd, (struct sockaddr *) &servaddr,sizeof(struct sockaddr_in));
-//    if (s32Rtn < 0)
-//    {
-//    	printf(" ****listen client  connected  listening on port %d, bind err, %d !!!!\n", pTcpPort,s32Rtn);
-//    	goto ERR;
-//    }
-//    else
-//    {
-//        printf(" **** listen client connected  listening on port %d \n", pTcpPort);
-//    }
-//
-//    s32Rtn = listen(sockfd, 5);
-//    if (s32Rtn < 0)
-//    {
-//        printf("client listening on port %d, listen err, %d \n", pTcpPort,s32Rtn);
-//	    goto ERR;
-//    }
-//    return sockfd;
-//   // else
-//    	//printf("---listen client connected thread start----\r\n");
-//
-//	//memset(receive_buf,0,MAXBUF);
-//	//memset(client_list,0,sizeof(client_status));
-//
-////while(1)
-//	//{
-//
-//	  //handle_connect(sockfd);
-//	  //handle_request();
-//	  //printf(" yyyyyyyyy\n ");
-////	  pthread_create(&thread_do[0], NULL, handle_connect, (void*)&sockfd);
-////	  pthread_create(&thread_do[1], NULL, handle_request, NULL);
-//      // break;
-//	//}
-//ERR:
-//      //close(client_list[client_num].client_socket);
-//	  //close(sockfd);
-//  //    printf(" socket connected thread stop \n ");
-//      listen_thread_isover = 1;
-//     return 0;
-//}
+uint8 TermDataReportMsg_flag = 0;
+int TermDataReportMsg_count = 0;
 int ConnectClient()
 {
 	int s_s;
-	int optval =1;
+	int optval = 1;
 	struct sockaddr_in local;
 	int i;
-	for(i=0; i<MAX_CLIENT_NUM;i++)
+	for (i = 0; i < MAX_CLIENT_NUM; i++)
 	{
 		connect_host[i] = -1;
+		islocalip_flag[i] = 0;
 	}
-//	memset(connect_host, -1, MAX_CLIENT_NUM); //用memset发现有些值没有被置-1；
-//	for(i=0; i<MAX_CLIENT_NUM;i++)
-//	{
-//		printf("connect host:%d\n",connect_host[i]);
-//	}
 	//SETUP tcp socket
 	s_s = socket(AF_INET, SOCK_STREAM, 0);
 	if (setsockopt(s_s, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1)//允许重复使用本地地址和端口?
@@ -284,184 +117,322 @@ int ConnectClient()
 		perror("setsockopt");
 		exit(1);
 	}
-	printf("server fd:%d\n",s_s);
-	//server_fd =s_s;
-	//init addr
 	memset(&local, 0, sizeof(local));
 	local.sin_family = AF_INET;
-    local.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr(argv[1]);//htonl(INADDR_ANY); //local addr anyway
-    local.sin_port = htons(CLIENT_PORT);
+	local.sin_addr.s_addr = htonl(INADDR_ANY);//inet_addr(argv[1]);//htonl(INADDR_ANY); //local addr anyway
+	local.sin_port = htons(CLIENT_PORT);
 
-    //bind
-    bind(s_s, (struct sockaddr *)&local, sizeof(local));
-    listen(s_s, 5);
-    return s_s;
+	//bind
+	bind(s_s, (struct sockaddr *) &local, sizeof(local));
+	listen(s_s, 5);
+	return s_s;
 }
 /*
  *get ipaddr by funtionc: getifaddrs and "eth0"
  * */
 void get_local_ipaddr()
 {
-    struct ifaddrs *ifaddr, *ifa;
-    int s;
-    char ret =0;
-    if (getifaddrs(&ifaddr) == -1) {
-        perror("getifaddrs");
-        return ;
-    }
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL)
-            continue;
-        if(strcmp(ifa->ifa_name, "eth0")!=0)
-        	continue;
-		s = getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),
-				local_addr, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-		if (s != 0) {
+	struct ifaddrs *ifaddr, *ifa;
+	int s;
+	char ret = 0;
+	if (getifaddrs(&ifaddr) == -1)
+	{
+		perror("getifaddrs");
+		return;
+	}
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+	{
+		if (ifa->ifa_addr == NULL)
+			continue;
+		if (strcmp(ifa->ifa_name, "eth0") != 0)
+			continue;
+		s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), local_addr,
+				NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+		if (s != 0)
+		{
 			printf("getnameinfo() failed: %s\n", gai_strerror(s));
-		}
-		else
+		} else
 		{
 			printf("address:%s\n", local_addr);
-			ret =1;
+			ret = 1;
 			break;
 		}
-    }
-    if(ret !=1){
-    	printf("get local addr error\n");
-    	exit(1);
-    }
-    freeifaddrs(ifaddr);
+	}
+	if (ret != 1)
+	{
+		printf("get local addr error\n");
+		exit(1);
+	}
+	freeifaddrs(ifaddr);
 }
-//
-void node_msg_process()
-{
-	pthread_t node_thread;
-	pthread_create(&node_thread,NULL,node_msg_thread,NULL);
 
-}
 void *node_msg_thread(void *p)
 {
 
-  while(1)
-  {
-	  nodeSocket();
-  }
-  return NULL;
+	while (1)
+	{
+		nodeSocket();
+	}
+	return NULL;
 }
+int connect_to_server_init(void);
 
-void server_msg_process()
+#ifdef PUSH_TO_SERVER_NEW_LOGIC
+/*
+ * 服务器上传逻辑修改，服务器相当于连接网关的一个本地客户端
+ * */
+void *server_msg_thread(void *p)
 {
-	pthread_t server_thread;
-	pthread_create(&server_thread,NULL,server_msg_thread,NULL);
+	char send_buffer[MAX_MSG_BUF]=
+	{	0};
+	int send_len;
+	//    int recbytes=0;
+	//	int ret=0;
+	int r_msg_num=0;
+	msgform msg_Rxque;
+
+	//    do
+	//   	  {cfd = connect_to_server_init();}
+	//   	while(!cfd);
+	while(1)
+	{
+		r_msg_num = msgrcv(MsgserverTxId,&msg_Rxque,(sizeof(msgform)-4),0,0);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
+		if((r_msg_num ==-1)&&(errno !=ENOMSG))
+		{
+			printf("errno:%d\n",errno);
+			perror("msgrcv:");
+		}
+		else if(r_msg_num >0)
+		{
+			printf("be will sending msg to server, type:%d,size:%d\n",msg_Rxque.mtype,r_msg_num);
+			send_len = add_time_field_in_upload_server_msg(send_buffer, msg_Rxque.mtext);
+			if(send_len >0)
+			send_msg_to_server(send_buffer, send_len, clientfd_local_2_cloudproxy);
+		}
+		// if(cfd!=-10)
+		// close(cfd);
+	}
+	return NULL;
+}
+#else
+/*
+ * yanly150512: 发现如果运行过程中服务器断开，没有重连机制
+ * */
+int server_msg_thread_loop()
+{
+	int cfd;
+	char buffer[MAXBUF] =
+	{ 0 };
+	int recbytes = 0;
+	int count_s = 0, count_r = 0;
+	int ret = 0;
+	int r_msg_num = 0;
+	msgform msg_Rxque;
+	int send_res;
+
+	do
+	{
+		cfd = connect_to_server_init();
+	} while (!cfd);
+	while (1)
+	{
+		r_msg_num = msgrcv(MsgserverTxId, &msg_Rxque, (sizeof(msgform) - 4), HeartReportMsg, IPC_NOWAIT);//有心跳消息时先获取心跳
+		if((r_msg_num == -1)&& (errno == ENOMSG))
+		{
+			r_msg_num = msgrcv(MsgserverTxId, &msg_Rxque, (sizeof(msgform) - 4), 0, IPC_NOWAIT);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
+		}
+		if ((r_msg_num == -1) && (errno != ENOMSG))
+		{
+			GDGL_DEBUG("errno:%d\n", errno);
+			perror("msgrcv:");
+			exit(1);
+		}
+		else if (r_msg_num > 0)
+		{
+			GDGL_DEBUG("sending msg to server, type:%d,size:%d\n",
+					msg_Rxque.mtype, r_msg_num);
+			//printf("server msg que:%s\n",msg_Rxque.mtext);
+			count_s = 0;
+			while (count_s++ < 3)
+			{
+				send_res = send_msg_to_server(msg_Rxque.mtext, r_msg_num, cfd); //old
+				if(send_res <0)
+					return -1;
+				printf("send_msg_to_server: ok\n");
+				count_r = 0;
+				while (count_r++ < 3)
+				{
+					//printf("test server send 22222\n");
+					recbytes = recv(cfd, buffer, MAXBUF, MSG_DONTWAIT);
+					printf("server recv flag is: %d\n",recbytes);
+					if ((recbytes == -1) && (errno != EAGAIN))
+					{
+						perror("socket read server data fail");
+						close(cfd);
+						server_connected_fd =0;
+						return -1;
+					} else if (recbytes > 0)
+					{
+//						printf("receive server 5031 size=%d \n", recbytes);
+						if ((ret = parse_received_server_msg(buffer)) < 0)
+						{
+							GDGL_DEBUG("server msg format error:%d\n", ret);
+						}
+						memset(buffer, 0, MAXBUF);
+						break;
+					} else if (recbytes == 0)
+					{
+						GDGL_DEBUG(
+								"connected server 5031,but the other side close this socket\n");
+						close(cfd);
+						server_connected_fd =0;
+						return -2;
+					}
+					printf("but not recved\n");
+					sleep(1);
+				}
+				if (count_r < 3) {
+					printf("server recved\n");
+					break;
+				}
+			}
+		}
+//		//NO MSG
+//		/*
+//		 * 处理心跳逻辑
+//		 * */
+//		send_res = send_server_heartbeat(cfd);
+//		if(send_res <0)
+//			return -1;
+//		/*
+//		 * */
+	}
+	return 0;
 }
 void *server_msg_thread(void *p)
 {
-
-  while(1)
-  {
-	  ServerSocket();
-  }
-  return NULL;
+	while (1)
+	{
+		server_msg_thread_loop();
+	}
+	return NULL;
 }
-
-
-//int nodeSocket()
+//void *server_msg_thread(void *p)
+//{
+//	int cfd;
+//	char buffer[MAXBUF]={0};
+//    int recbytes=0;
+//    int count_s=0,count_r=0;
+//	int ret=0;
+//    int r_msg_num=0;
+//    msgform msg_Rxque;
+//    //add by yanly150512
+//	char send_buffer[MAX_MSG_BUF]={0};
+//	int send_len;
+//	//
+//    do
+//   	  {cfd = connect_to_server_init();}
+//   	while(!cfd);
+//    while(1)
 //    {
-//        uint8 msg[20] = "0200070007";
-//		//int bytes_sent=0;
-//		int cfd=0;                                           //�ļ�������
-//		int recbytes=0;
-//		char buffer[MAXBUF]={0};	                          //���ܻ�����
-//		struct sockaddr_in s_add;                   //�洢����˺ͱ��˵�ip���˿ڵ���Ϣ�ṹ��
-//		uint16 nodeport=0;
-//		uint8 rc=0;
-//		//cJSON *root;
-//	    //char *out=NULL;
 //
-//		nodeport=NODE_PORT;
-//	    //nodeport=5002;
-//		cfd = socket(AF_INET, SOCK_STREAM, 0);           //����socket ʹ����������TCP������
-//		if(cfd == -1 )
-//		{
-//			printf("node socket fail ! \r\n");
-//			return -1;
-//		}
-//		printf("node socket ok !\r\n");
+//	           r_msg_num = msgrcv(MsgserverTxId,&msg_Rxque,(sizeof(msgform)-4),0,0);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
 //
-//		bzero(&s_add,sizeof(struct sockaddr_in));        //����������˵�ip�Ͷ˿���Ϣ������ṹ����Բ�����
-//		s_add.sin_family=AF_INET;
-//		s_add.sin_addr.s_addr= inet_addr(GATEWAY_IPADDR);    //ipת��Ϊ4�ֽ����Σ�ʹ��ʱ��Ҫ���ݷ����ip���и���
-//		s_add.sin_port=htons(nodeport);
+//	           if((r_msg_num ==-1)&&(errno !=ENOMSG))
+//	  	  		{
+//	  	  			printf("errno:%d\n",errno);
+//	  	  			perror("msgrcv:");
 //
-//		printf("node_addr = %#x ,nodeport=: %#x\r\n",s_add.sin_addr.s_addr,s_add.sin_port); // �����ӡ������С�˺�����ƽʱ���������෴�ġ�
+//	  	  		}
+//	  	  		else if(r_msg_num >0)
+//	  	  		{
 //
-//		if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )// �ͻ������ӷ���������������Ϊsocket�ļ�����������ַ��Ϣ����ַ�ṹ��С
-//		{
-//			printf("node connect fail !\r\n");
-//			return -1;
-//		}
-//		else
-//		{
-//		  printf("node socket connect ok ! rc=%d\r\n",rc);
-//		  if(node_heart_flag==enable)
-//		    {
-//			  node_heart_flag=disable;
-//			  printf("send node heart beat\n");
-//			  send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
-//			 }
 //
-//		  memset(buffer,0,MAXBUF);
-//          recbytes = recv(cfd, buffer, MAXBUF,0);     //���ӳɹ�,�ӷ���˽����ַ�
-//          DBG_PRINT("recbytes= %d\n",recbytes);
+//	  	  			printf("be will sending msg to server, type:%d,size:%d\n", msg_Rxque.mtype,r_msg_num);
+//	  				send_len = add_time_field_in_upload_server_msg(send_buffer, msg_Rxque.mtext);//add by yanly150512
+//	  				if(send_len <=0)
+//	  					continue;
+//	  	             //printf("server msg que:%s\n",msg_Rxque.mtext);
 //
-//		  if(recbytes==-1)
-//		  {
-//			printf("node read data fail !\r\n");
-//			return -1;
-//		  }
-//         else if(recbytes>0)
-//		  {
-//            //DBG_PRINT("3333\n");
-//		    printf("node rxbuffer=%s\r\n",buffer);
-//		    if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
-//	        {parse_json_node(buffer,recbytes);}
-//		    else
-//		    {printf("receive node data error\n");}
-//       	  }
+//	  	  			count_s = 0;
+//	  	  			while (count_s++< 3)
+//	  	  			{
+//	  	  				//send_msg_to_server(msg_Rxque.mtext, r_msg_num, cfd); //old
+//		  				send_msg_to_server(send_buffer, send_len, cfd);
 //
-//	}
-//		//close(cfd);
-//		return 0;
+//	  	  				count_r = 0;
+//	  	  				while (count_r++ < 3)
+//	  	  				{
 //
+//	  	  				  //printf("test server send 22222\n");
+//	  	  					recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);
+//                           // printf("test recv 555555 %d\n",recbytes);
+//	  	  					if((recbytes==-1)&&(errno!=EAGAIN))
+//	  	  					{
+//	  	  						printf("recbytes:%d\n",recbytes);
+//	  	  						perror("socket read server data fail");
+//	  	  						//close(cfd);
+//	  	  						//return -1;
+//	  	  					}
+//	  	  					else if(recbytes>0)
+//	  	  					{
+//	  	  						printf("receive server 5031 size=:%d \n",recbytes);
+//	  	  						if((ret=parse_received_server_msg(buffer))<0)
+//	  	  						{
+//	  	  							printf("server msg format error:%d\n",ret);
+//	  	  						}
+//	  	  						memset(buffer,0,MAXBUF);
+//	  	  						break;
+//	  	  					}
+//	  	  					else if(recbytes==0)
+//	  	  					{
+//	  	  						printf("connected server 5031,but the other side close this socket\n");
+//	  	  						//close(cfd);
+//	  	  						//return -2;
+//	  	  					}
+//	  	  					sleep(1);
+//	  	  				}
+//	  	  				if (count_r < 3)
+//	  	  					break;
+//
+//	  	  			}
+//
+//	  	  			//printf("server11111 \n");
+//            }
+//	        // if(cfd!=-10)
+//	        // close(cfd);
+//   }
+//  return NULL;
 //}
+#endif
 
 /*
  * connect gateway 5018 init
  * */
 static int connect_to_gateway_init(void)
 {
-	int cfd=0;
+	int cfd = 0;
 	struct sockaddr_in s_add;
-	int rc=-1;
+	int rc = -1;
 	cfd = socket(AF_INET, SOCK_STREAM, 0);
-	if(cfd == -1 )
+	if (cfd == -1)
 	{
-		printf("node socket fail ! \r\n");
+		GDGL_DEBUG("node socket fail ! \r\n");
 		return -1;
 	}
-	bzero(&s_add,sizeof(struct sockaddr_in));
-	s_add.sin_family=AF_INET;
-	s_add.sin_addr.s_addr= inet_addr(local_addr);//modify by yan
-	s_add.sin_port=htons(NODE_PORT);
-//	do
-//	{
-//		printf("gateway 5018 not connected!\n");
-//		sleep(RECONNECT_GATAWAY5018_TIME);
-		rc = connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr));
-//	}
-//	while(rc ==-1);
-	if(rc !=-1)
-		printf("connected gateway 5018 socket success,socket:%d\n",cfd);
+	bzero(&s_add, sizeof(struct sockaddr_in));
+	s_add.sin_family = AF_INET;
+	s_add.sin_addr.s_addr = inet_addr("127.0.0.1");//modify by yan
+	s_add.sin_port = htons(NODE_PORT);
+	//	do
+	//	{
+	//		printf("gateway 5018 not connected!\n");
+	//		sleep(RECONNECT_GATAWAY5018_TIME);
+	rc = connect(cfd, (struct sockaddr *) (&s_add), sizeof(struct sockaddr));
+	//	}
+	//	while(rc ==-1);
+	if (rc != -1)
+		GDGL_DEBUG("connected gateway 5018 socket success,socket:%d\n", cfd);
 	return cfd;
 }
 /*
@@ -469,31 +440,48 @@ static int connect_to_gateway_init(void)
  * */
 int connect_to_server_init(void)
 {
-	int cfd=0;
+	int cfd = 0;
 	struct sockaddr_in s_add;
-	int rc=-1;
+	int rc = -1;
+
+	server_connected_fd = 0;
 	cfd = socket(AF_INET, SOCK_STREAM, 0);
-	if(cfd == -1 )
+	if (cfd == -1)
 	{
-		printf("connect to server socket setup fail ! \r\n");
+		GDGL_DEBUG("connect to server socket setup fail ! \r\n");
 		return -1;
+	} else
+	{
+//		printf("connect to server socket setup sucess:cfd= %d! \r\n", cfd);
 	}
-	bzero(&s_add,sizeof(struct sockaddr_in));
-	s_add.sin_family=AF_INET;
-	s_add.sin_addr.s_addr= inet_addr(local_addr);//(SERVER_IPADDR_DEBUG);//debug by yan
-	s_add.sin_port=htons(SERVER_PORT);
-	printf("server not connected!\n");
+	bzero(&s_add, sizeof(struct sockaddr_in));
+	s_add.sin_family = AF_INET;
+	s_add.sin_addr.s_addr = inet_addr(SERVER_IPADDR_DEBUG);//(local_addr);//(SERVER_IPADDR_DEBUG);//debug by yang
+	s_add.sin_port = htons(SERVER_PORT);
+
 	do
 	{
+		//sleep(RECONNECT_SERVER_TIME);
+		rc
+				= connect(cfd, (struct sockaddr *) (&s_add),
+						sizeof(struct sockaddr));
+		//		printf("SERVER_PORT=%d\n",SERVER_PORT);
+		//		printf("s_add.sin_port=%d\n",s_add.sin_port);
+		//		printf("s_add.sin_addr.s_addr=%d\n",s_add.sin_addr.s_addr);
+		//		printf("rc=%d\n",rc);
 		sleep(RECONNECT_SERVER_TIME);
-		rc = connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr));
-	}
-	while(rc ==-1);
+		if (rc == -1)
+		{
+			GDGL_DEBUG("server not connected!\n");
+		}
+	} while (rc == -1);
 
-	printf("connected server socket success,socket:%d\n",cfd);
+	GDGL_DEBUG("connected server socket success,socket:%d\n", cfd);
+	server_connected_fd = cfd;
 	sleep(RECONNECT_SERVER_TIME);
 	//网关首次连接到服务器，发送配置给服务器
 	send_all_security_config_to_server(cfd);
+	send_all_energy_config_to_server(cfd);
 	return cfd;
 }
 /*
@@ -503,71 +491,73 @@ int nodeSocket() //modify141230
 {
 	uint8 msg[20] = "0200070007";
 	int cfd;
-	char buffer[1024];
+	char buffer[MAXBUF] =
+	{ 0 };
 	int recbytes;
 	int s_status;
 	int detach_obj;
+
 	cfd = connect_to_gateway_init();
-	memset(buffer,0,MAXBUF);
-	while(cfd)// connected
+	memset(buffer, 0, MAXBUF);
+	while (cfd)// connected
 	{
-		if(node_heart_flag == enable)
+		if (node_heart_flag == enable)
 		{
-			node_heart_flag=disable;
+			node_heart_flag = disable;
 			//printf("send node heart beat\n");
-			s_status = send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
-			if(s_status ==-1)
+			s_status = send(cfd, msg, sizeof(msg), MSG_DONTWAIT);
+			if (s_status == -1)
 			{
 				perror("connected gateway 5018,but send error\n");
 				close(cfd);
 				return -1;
-			}
-			else if(s_status ==0)
+			} else if (s_status == 0)
 			{
-				printf("connected gateway 5018,but the other side close this socket\n");
+				GDGL_DEBUG(
+						"connected gateway 5018,but the other side close this socket\n");
 				close(cfd);
 				return -2;
-			}
-			else
-			{}//normal send
+			} else
+			{
+			}//normal send
 		}
-		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);     //���ӳɹ�,�ӷ���˽����ַ�
-		if((recbytes==-1)&&(errno!=EAGAIN))
+		recbytes = recv(cfd, buffer, MAXBUF, MSG_DONTWAIT); //���ӳɹ�,�ӷ���˽����ַ�
+		if ((recbytes == -1) && (errno != EAGAIN))
 		{
 			//printf("recbytes:%d\n",recbytes);
 			perror("node read data fail");
 			close(cfd);
 			return -1;
-		}
-		else if(recbytes>0)
+		} else if (recbytes > 0)
 		{
-			printf("receive 5018 size:%d \n",recbytes);
-			detach_obj = detach_5002_message22(buffer,recbytes);
+			//printf("receive 5018 [size=%d][buff=%s]\n",recbytes,buffer);
+			//GDGL_DEBUG("receive 5018 [size=%d]\n", recbytes);
+			detach_obj = detach_5002_message22(buffer, recbytes);
 			//printf("5002message22:%d\n",detach_obj);
-			//detach_obj = DETACH_BELONG_SECURITY;
-			switch(detach_obj)
+			switch (detach_obj)
 			{
-				case  DETACH_BELONG_ENERGY:     /*这个case处理节能的信息*/
-					//parse_json_node(buffer,recbytes);
+				case DETACH_BELONG_ENERGY: /*这个case处理节能的信息*/
+					//printf("parse_json_node 1111111\n");
+					parse_json_node(buffer, recbytes);
 					break;
-				case  DETACH_BELONG_SECURITY:	/*这个case处理安防的信息*/
-					parse_json_node_security(buffer,recbytes);
+				case DETACH_BELONG_SECURITY: /*这个case处理安防的信息*/
+					parse_json_node_security(buffer, recbytes);
 					break;
-				case  DETACH_BELONG_IN_COMMON:
+				case DETACH_BELONG_IN_COMMON:
 					origin_callback_handle(buffer, recbytes); //设备节点重新上电产生的callback处理
 					break;
-				default :
+				default:
 					break;
 			}
-			memset(buffer,0,MAXBUF);
-		}
-		else if(recbytes==0)
+			memset(buffer, 0, MAXBUF);
+		} else if (recbytes == 0)
 		{
-			printf("connected gateway 5018,but the other side close this socket\n");
+			GDGL_DEBUG(
+					"connected gateway 5018,but the other side close this socket\n");
 			close(cfd);
 			return -2;
 		}
-
+		usleep(1000);
 	}
 	//close(cfd);
 	return 0;
@@ -577,42 +567,81 @@ int nodeSocket() //modify141230
  * 处理服务器业务的单元
  * 采用轮询方式：执行发送心跳包>>发送消息队列数据>>接收服务器发过来的消息,不阻塞
  * */
+
+void parse_receive_servermsg(msgform msg_Rque, int rcv_num, int scfd)
+{
+	//msgform msg_que;
+	//memcpy(msg_Rque,msg_Rxque,rcv_num);
+	switch (msg_Rque.mtype)
+	{
+		case ConfigReportMsg:
+
+			if (ConfigReportMsg_count < 3)
+			{
+				if (ConfigReportMsg_flag == 1)
+				{
+					ConfigReportMsg_flag = 0;
+					ConfigReportMsg_count = 0;
+				} else
+				{
+					send_msg_to_server(msg_Rque.mtext, rcv_num, scfd);
+					ConfigReportMsg_count++;
+					json_msgsnd(MsgserverTxId, ConfigReportMsg, msg_Rque.mtext,
+							rcv_num);
+				}
+			} else
+				ConfigReportMsg_count = 0;
+			break;
+
+		case TermDataReportMsg:
+
+			if (TermDataReportMsg_count < 3)
+			{
+				if (TermDataReportMsg_flag == 1)
+				{
+					TermDataReportMsg_flag = 0;
+					TermDataReportMsg_count = 0;
+				} else
+				{
+					json_msgsnd(MsgserverTxId, TermDataReportMsg,
+							msg_Rque.mtext, rcv_num);
+					send_msg_to_server(msg_Rque.mtext, rcv_num, scfd);
+					TermDataReportMsg_count++;
+				}
+			} else
+				TermDataReportMsg_count = 0;
+			break;
+		default:
+			break;
+	}
+}
+#if 0
 int ServerSocket() //modify141230
+
 {
 	int cfd;
-	char buffer[1024];
+	char buffer[MAXBUF];
 	int recbytes;
 	int ret;
 	int r_msg_num;
 	msgform msg_Rxque;
+	//printf("server11111 \n");
 	cfd = connect_to_server_init();
 	memset(buffer,0,MAXBUF);
 	while(cfd)// connected
+
 	{
-//心跳
+		//心跳
 		if(send_server_heartbeat(cfd) <0)
-			return -1;
-//发送接收的消息队列
-		r_msg_num = msgrcv(MsgserverTxId,&msg_Rxque,sizeof(msgform),0,IPC_NOWAIT);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
-		if((r_msg_num ==-1)&&(errno !=ENOMSG))
-		{
-			printf("errno:%d\n",errno);
-			perror("msgrcv:");
-		}
-		else if(r_msg_num >0)
-		{
-			//send
-			printf("be will sending msg to server, type:%ld,size:%d\n",msg_Rxque.mtype,r_msg_num);
-//			printf("server msg que:%s\n",msg_Rxque.mtext);
-			send_msg_to_server(msg_Rxque.mtext, r_msg_num, cfd);
-		}
-//接收server msg
+		return -1;
+
+		//接收server msg
 		recbytes = recv(cfd, buffer, MAXBUF,MSG_DONTWAIT);
 		if((recbytes==-1)&&(errno!=EAGAIN))
 		{
 			//printf("recbytes:%d\n",recbytes);
 			perror("socket read server data fail");
-			close(cfd);
+			//close(cfd);
 			return -1;
 		}
 		else if(recbytes>0)
@@ -627,32 +656,54 @@ int ServerSocket() //modify141230
 		else if(recbytes==0)
 		{
 			printf("connected server 5040,but the other side close this socket\n");
-			close(cfd);
+			//close(cfd);
 			return -2;
+		}
+		//发送接收的消息队列
+		r_msg_num = msgrcv(MsgserverTxId,&msg_Rxque,sizeof(msgform),0,IPC_NOWAIT);//返回队列中最老的消息,不阻塞，没有消息时返回ENOMSG
+		if((r_msg_num ==-1)&&(errno !=ENOMSG))
+		{
+			printf("errno:%d\n",errno);
+			perror("msgrcv:");
+		}
+		else if(r_msg_num >0)
+		{
+			//send
+			printf("be will sending msg to server, type:%ld,size:%d\n",msg_Rxque.mtype,r_msg_num);
+			//			printf("server msg que:%s\n",msg_Rxque.mtext);
+			send_msg_to_server(msg_Rxque.mtext, r_msg_num, cfd);
+			// parse_receive_servermsg(msg_Rxque,r_msg_num,cfd);
+
 		}
 
 	}
 	//close(cfd);
 	return 0;
 }
+
+#endif
 /*
  * send server heartbeat
  * */
-static int send_server_heartbeat(int fd)
+#if 0
+int send_server_heartbeat(int fd)
 {
 	cJSON* root;
 	char *out;
 	int ret = 1;
-
 	if(server_heart_flag == enable)
 	{
+		printf("send server heartbeat\n");
 		server_heart_flag = disable;
-
 		root=cJSON_CreateObject();
-	    cJSON_AddNumberToObject(root,"MsgType", 64);
-	    cJSON_AddNumberToObject(root,"Sn",		10);
-	    out = cJSON_PrintUnformatted(root);
-	    ret = send(fd,out,strlen(out),MSG_DONTWAIT);
+		cJSON_AddNumberToObject(root,"MsgType", 64);
+		cJSON_AddNumberToObject(root,"Sn", server_heart_sn);
+		if(server_heart_sn<255)
+			server_heart_sn++;
+		else
+			server_heart_sn=0;
+		out = cJSON_PrintUnformatted(root);
+		ret = send(fd,out,strlen(out),MSG_DONTWAIT);
 		if(ret ==-1)
 		{
 			perror("connected server 5040,but send error\n");
@@ -666,105 +717,38 @@ static int send_server_heartbeat(int fd)
 			return -2;
 		}
 		else
-		{}//normal send
-	    cJSON_Delete(root);
-	    free(out);
+		{
+			printf("send server heartbeat\n");
+		}//normal send
+		cJSON_Delete(root);
+		free(out);
 	}
-    return ret;
+	return ret;
 }
-/***************************************************************************************/
-uint8 ServerHeart_sn=0;
-#if 0
-int ServerSocket()
-    {
-//        uint8 msg[20] = "0200070007";
-		//int bytes_sent=0;
-		int cfd=0;                                           //�ļ�������
-		int recbytes=0;
-		char buffer[MAXBUF]={0};	                          //���ܻ�����
-		struct sockaddr_in s_add;                   //�洢����˺ͱ��˵�ip���˿ڵ���Ϣ�ṹ��
-		uint16 serverport=0;
-		uint8 rc=0;
-		uint8 Rx_msgnum=0;
-		msgform msg_Rxque;
-		cJSON *root;
-	    char *out=NULL;
+#else
+void send_server_heartbeat()
+{
+	cJSON* root;
+	char *out;
+//	int ret = 1;
 
-		serverport=SERVER_PORT;
-
-		cfd = socket(AF_INET, SOCK_STREAM, 0);           //����socket ʹ����������TCP������
-		if(cfd == -1 )
-		{
-			printf("server socket fail ! \r\n");
-			return -1;
-		}
-		printf("server socket ok !\r\n");
-
-		bzero(&s_add,sizeof(struct sockaddr_in));        //����������˵�ip�Ͷ˿���Ϣ������ṹ����Բ�����
-		s_add.sin_family=AF_INET;
-		s_add.sin_addr.s_addr= inet_addr(SERVER_IPADDR);
-		s_add.sin_port=htons(serverport);
-
-		printf("server_addr = %#x ,serverport=: %#x\r\n",s_add.sin_addr.s_addr,s_add.sin_port); // �����ӡ������С�˺�����ƽʱ���������෴�ġ�
-
-		if((rc=connect(cfd,(struct sockaddr *)(&s_add), sizeof(struct sockaddr)))==-1 )// �ͻ������ӷ���������������Ϊsocket�ļ�����������ַ��Ϣ����ַ�ṹ��С
-		{
-			printf("server connect fail !\r\n");
-			return -1;
-		}
-		else
-		{
-		  printf("server socket connect ok ! rc=%d\r\n",rc);
-
-		//  if(server_heart_flag==enable)
-		  if(0)
-		    {
-			  server_heart_flag=disable;
-			  printf("send server heart beat\n");
-			  root=cJSON_CreateObject();
-
-			  cJSON_AddNumberToObject(root,"MsgType", HeartReportMsg);
-			  cJSON_AddNumberToObject(root,"Sn",ServerHeart_sn);
-			  out=cJSON_PrintUnformatted(root);
-			  cJSON_Delete(root);
-			  printf("out=%s\n",out);
-			  send(cfd,out,strlen(out),MSG_DONTWAIT);
-			  //send(cfd,msg,sizeof(msg),MSG_DONTWAIT);
-			 }
-
-		   Rx_msgnum=msgrcv(MsgserverTxId,&msg_Rxque,sizeof(msgform),0,0);
-		   printf("server msg_Rxque.mtype=%04x\n",msg_Rxque.mtype);
-		   printf("server Rx_msgnum=%d\n",Rx_msgnum);
-		   if(Rx_msgnum!=0)
-		 	{
-		 		 package_json_server(&msg_Rxque,Rx_msgnum,cfd);
-
-		    }
-
-
-		  memset(buffer,0,MAXBUF);
-          recbytes = recv(cfd, buffer, MAXBUF,0);
-          DBG_PRINT("recbytes= %d\n",recbytes);
-		  if(recbytes==-1)
-		  {
-			printf("server read data fail !\r\n");
-			return -1;
-		  }
-         else if(recbytes>0)
-		  {
-            //DBG_PRINT("3333\n");
-		    printf("server rxbuffer=%s\r\n",buffer);
-		    if((buffer[0]=='{')&&(buffer[recbytes-1]=='}'))
-		    { parse_json_server(buffer,recbytes);}
-		    else
-		    {printf("receive server data error\n");}
-       	  }
-
-	   }
-		//close(cfd);
-		return 0;
+	root = cJSON_CreateObject();
+	cJSON_AddNumberToObject(root,"MsgType", HeartReportMsg);
+	cJSON_AddNumberToObject(root,"Sn", server_heart_sn);
+	if (server_heart_sn < 255)
+		server_heart_sn++;
+	else
+		server_heart_sn = 0;
+	out = cJSON_PrintUnformatted(root);
+	json_msgsnd(MsgserverTxId, HeartReportMsg, out, strlen(out)); //转发给服务器
+	//ret = send(fd,out,strlen(out),MSG_DONTWAIT);
+	cJSON_Delete(root);
+	free(out);
+	//return ret;
 }
 #endif
+/***************************************************************************************/
+
 /*
  * 修改客户端socket的heartbeat值
  * */
@@ -780,9 +764,10 @@ static void set_heart_beat(int i, char heart_status)
 void set_heart_beat_client(int client_fd)
 {
 	int i;
-	for(i = 0; i<MAX_CLIENT_NUM; i++){
-		if(connect_host[i] == client_fd){
-
+	for (i = 0; i < MAX_CLIENT_NUM; i++)
+	{
+		if (connect_host[i] == client_fd)
+		{
 			set_heart_beat(i, HEARTBEAT_OK);
 		}
 	}
@@ -790,29 +775,37 @@ void set_heart_beat_client(int client_fd)
 /*
  * 检测心跳单元
  * */
-void *check_client_heartbeat()
+void *check_client_heartbeat(void *p)
 {
 	int i;
-	while(1){
-		if(client_flag == enable){
-			client_flag = disable;
-			for(i=0; i<MAX_CLIENT_NUM; i++)
+	while (1)
+	{
+		sleep(1);//不加延时，client_flag 可能会被编译器优化 //add yanly150512
+		if (client_flag == 1)
+		{
+			//			printf("check_client_heartbeat\n");
+			client_flag = 0;
+			for (i = 0; i < MAX_CLIENT_NUM; i++)
 			{
-				if(client_num<=0)
+				if (client_num <= 0)
 					break;
-				if(connect_host[i] != -1)
+				if (connect_host[i] != -1)
 				{
-					if(connect_host_online[i] == HEARTBEAT_NOT_OK){
-						printf("Didn't receive the heartbeat packets within the regulation time:clolse socket%d\n",connect_host[i]);
+					if (connect_host_online[i] == HEARTBEAT_NOT_OK)
+					{
+						printf(
+								"Didn't receive the heartbeat packets within the regulation time:clolse socket%d\n",
+								connect_host[i]);
 						close_client(i);
-					}
-					else{
+					} else
+					{
 						set_heart_beat(i, HEARTBEAT_NOT_OK);
 					}
 				}
 			}
 		}
 	}
+	return 0;
 }
 /*
  * 客户端连接断开，进行关闭操作
@@ -821,13 +814,15 @@ static void close_client(int i)
 {
 	close(connect_host[i]);
 	pthread_mutex_lock(&mutex);
-	connect_host[i] =-1;
+	connect_host[i] = -1;
+	islocalip_flag[i] = 0;//add 0624
 	client_num--;
 	pthread_mutex_unlock(&mutex);
 }
 /*
  * 建立客户端连接单元
  * */
+#ifdef PUSH_TO_SERVER_NEW_LOGIC
 void *handle_connect(void *argv)
 {
 	int s_s = *((int *)argv);
@@ -837,7 +832,15 @@ void *handle_connect(void *argv)
 	{
 		int i = 0;
 		int s_c = accept(s_s, (struct sockaddr*)&from, &len);
-		printf("a client connect,from: %s,sock:%d \n",inet_ntoa(from.sin_addr),s_c);
+		printf("a client connect,from: %s,sock:%d \n", inet_ntoa(from.sin_addr),s_c);
+		if(clientfd_local_2_cloudproxy <0)
+		{
+			if(memcmp(inet_ntoa(from.sin_addr), "127.0.0.1", 9) ==0)
+			{
+				printf("local client connected!\n");
+				clientfd_local_2_cloudproxy = s_c;
+			}
+		}
 		//put the client socket to connect_host
 		for(i=0; i<MAX_CLIENT_NUM; i++)
 		{
@@ -852,183 +855,186 @@ void *handle_connect(void *argv)
 	}
 	return NULL;
 }
+#else
+void *handle_connect(void *argv)
+{
+	int s_s = *((int *) argv);
+	struct sockaddr_in from;
+	socklen_t len = sizeof(from);
+	for (;;)
+	{
+		int i = 0;
+		int s_c = accept(s_s, (struct sockaddr*) &from, &len);
+		GDGL_DEBUG("a client connect,from: %s,sock:%d \n",
+				inet_ntoa(from.sin_addr), s_c);
+		//put the client socket to connect_host
+		for (i = 0; i < MAX_CLIENT_NUM; i++)
+		{
+			if (connect_host[i] == -1)
+			{
+				connect_host[i] = s_c;
+				if( memcmp(inet_ntoa(from.sin_addr), "127.0.0.1", 9) ==0 ) {
+					islocalip_flag[i] =1;
+					printf("socket[%d] is localip\n",s_c);
+				}
+				client_num++;
+				if(client_num >MAX_CLIENT_NUM) {
+					printf("client exceed max!\n");
+					exit(1);
+				}
+				printf("client num=%d\n",client_num);
+				set_heart_beat(i, HEARTBEAT_OK);
+				break;
+			}
+		}
+		if(client_num >MAX_CLIENT_NUM) {
+			GDGL_DEBUG("client connect exceed max!\n");
+			exit(1);
+		}
+	}
+	return NULL;
+}
+#endif
 void *handle_request(void *argv)
 {
-	char buff[MAXBUF];
-	char respondBUff[1024];
-	int n=0;
-	int maxfd =-1;
+	char buff[MAX_MSG_BUF];
+	char respondBUff[MAXBUF];
+	int n = 0;
+	int maxfd = -1;
 	fd_set scanfd;
-	struct timeval timeout;
-	timeout.tv_sec =1;
-	timeout.tv_usec =0;
-	int i =0;
+	struct timeval timeout_tv={1, 0};
+//	timeout_tv.tv_sec = 3;
+//	timeout_tv.tv_usec = 0;
+	int i = 0;
 	int err = -1;
 	int __buffType;
 
-	for(;;)
+	for (;;)
 	{
-		maxfd =-1;
+		timeout_tv.tv_sec = 1;  //add yanly150521
+		timeout_tv.tv_usec = 0;
+		maxfd = -1;
 		FD_ZERO(&scanfd);
-		for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+		for (i = 0; i < MAX_CLIENT_NUM; i++) //resolve scanfd and maxfd
 		{
-			if(connect_host[i] !=-1)
+			if (connect_host[i] != -1)
 			{
 				FD_SET(connect_host[i], &scanfd);
-				if(maxfd< connect_host[i])
+				if (maxfd < connect_host[i])
 				{
 					maxfd = connect_host[i];
 				}
 			}
 		}
 		//select wait socket
-		err = select(maxfd+1, &scanfd, NULL, NULL, &timeout);
-		switch(err)
+		err = select(maxfd + 1, &scanfd, NULL, NULL, &timeout_tv);
+		switch (err)
 		{
-			case 0:	break;		//timeout
-			case -1: break;		//error happen
+			case 0:
+				break; //timeout之后会被清零
+			case -1:
+				GDGL_DEBUG("select error\n");
+				exit(1);
+				break; //error happen
 			default:
-				if(client_num<=0)
+				if (client_num <= 0)
 					break;
-				for(i=0; i<MAX_CLIENT_NUM; i++)
+				for (i = 0; i < MAX_CLIENT_NUM; i++)
 				{
-					if(connect_host[i] !=-1)
+					if (connect_host[i] != -1)
 					{
-						if(FD_ISSET(connect_host[i], &scanfd))
+						if (FD_ISSET(connect_host[i], &scanfd))
 						{
-							memset(buff, 0, MAXBUF);
-							n = recv(connect_host[i], buff, MAXBUF, 0);
-							if(n>0)
+							memset(buff, 0, MAX_MSG_BUF);
+							n = recv(connect_host[i], buff, MAX_MSG_BUF, 0);
+							if (n > 0)
 							{
-								//printf("something recv ,size: %d, connect file:%d \n",n,connect_host[i]);
+								printf("recv client msg----------------------------------\n");
+								printf("recv client size[%d],fd[%d],msg: %s\n", n, connect_host[i], buff);
 								//printf("buff[0]=%d,buff[n-1]=%d \n",buff[0],buff[n-1]);
 								//printf("sever recieve data:%s \n", buff);
-//									memcpy(client_list[i].client_buff,buff,n);
-							   // printf("**client_buff=%s ****\r\n",buff);
-//									client_list[i].client_buff_len=n;
-								__buffType = detach_interface_msg_client(buff, n);//detach interface
-								switch(__buffType)
+								//									memcpy(client_list[i].client_buff,buff,n);
+								// printf("**client_buff=%s ****\r\n",buff);
+								//									client_list[i].client_buff_len=n;
+								//printf("size:%d\n",n);
+								__buffType = detach_interface_msg_client(buff,
+										n);//detach interface
+								switch (__buffType)
 								{
-									case  DETACH_PRASE_ERROR:
-										memcpy(respondBUff,"data format error:", 18);
-										memcpy(respondBUff+18,buff, n);
-										send(connect_host[i],respondBUff, n+18, 0);
-										printf("received client message,but prase json error\n");
+									case DETACH_PRASE_ERROR:
+										memcpy(respondBUff,
+												"data format error:", 18);
+										memcpy(respondBUff + 18, buff, n);
+										send(connect_host[i], respondBUff, n
+												+ 18, 0);
+										GDGL_DEBUG(
+												"received client message,but prase json error\n");
 										break;
-									case  DETACH_MSGTYPE_ERROR:
-										client_msg_handle_in_msgtype_error(buff, n, connect_host[i]);
+									case DETACH_MSGTYPE_ERROR:
+										client_msg_handle_in_msgtype_error(
+												buff, n, connect_host[i]);
 										break;
-/*这个case处理节能的客户端信息*/			case  DETACH_BELONG_ENERGY:
+										/*这个case处理节能的客户端信息*/
+									case DETACH_BELONG_ENERGY:
 										//parse_json_client(buff, n, connect_host[i]);
+										client_msg_handle_energy(buff, n,
+												connect_host[i]);
 										break;
-/*这个case处理安防的客户端信息*/			case  DETACH_BELONG_SECURITY:
+										/*这个case处理安防的客户端信息*/
+									case DETACH_BELONG_SECURITY:
 										//printf("received client message >>for security >>");
-										client_msg_handle_security(buff, n, connect_host[i]);
+										client_msg_handle_security(buff, n,
+												connect_host[i]);
 										break;
 									case DETACH_BELONG_IN_COMMON:
-										client_msg_handle_in_common(buff, n, connect_host[i]);
+										client_msg_handle_in_common(buff, n,
+												connect_host[i]);
 										break;
-									default:break;
+									default:
+										break;
 								}
 								//send(connect_host[i],buff,strlen(buff),0);
-								memset(buff, 0, MAXBUF);
-							}
-							else if(n==0)
+								memset(buff, 0, MAX_MSG_BUF);
+							} else if (n == 0)
 							{
-								printf("socket%d disconneted!\n",connect_host[i]);
-								connect_host[i] = -1;
-								client_num --;
-								close(connect_host[i]);
-							}
-							else if(n==-1)
+								GDGL_DEBUG("client socket%d disconneted!\n",
+										connect_host[i]);
+								close_client(i);
+//								connect_host[i] = -1;
+//								client_num--;
+//								close(connect_host[i]);
+							} else if (n == -1)
 							{
-								printf("socket%d disconneted!\n",connect_host[i]);
-								connect_host[i] = -1;
-								client_num--;
-								close(connect_host[i]);
+								GDGL_DEBUG("client socket%d disconneted!\n",
+										connect_host[i]);
+								close_client(i);
+//								connect_host[i] = -1;
+//								client_num--;
+//								close(connect_host[i]);
 							}
 						}
 					}
 				}
-			break;
+				break;
 		}
 	}
 	//free
-	for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+	for (i = 0; i < MAX_CLIENT_NUM; i++) //resolve scanfd and maxfd
 	{
-		if(connect_host[i]!=-1)
+		if (connect_host[i] != -1)
 		{
 			close(connect_host[i]);
 		}
 	}
 	return NULL;
 }
-//int handle_request()
-#if 0
-void *handle_request(void *argv)
-{
-	char receive_buf[MAXBUF]={0};
-	int Recvsize_2 = 0,i=0;
 
-  while(1)
- {
-	for(i=0;i<MAX_CLIENT_NUM;i++)
-	{
-		if(client_list[i].client_socket>=0)
-		{
-			Recvsize_2 = recv(client_list[i].client_socket, receive_buf,sizeof(receive_buf), 0);
-
-	        printf("***Recvsize_2=%d ****\r\n",Recvsize_2);
-	        printf("***client_socket=%02x ****\r\n",client_list[i].client_socket);
-	       // printf("***client_num=%d ****\r\n",client_num);
-	        //if(receive_buf != NULL)
-	        if(Recvsize_2 > 0)
-	        {
-
-	          //if((receive_buf[0]=='{')&&(receive_buf[Recvsize_2-1]=='}'))
-	        	if(receive_buf[0]=='{')
-	            {printf("receive json=%s\r\n",receive_buf);
-	           // printf("***receive client json ****\r\n");
-
-	            memcpy(client_list[i].client_buff,receive_buf,Recvsize_2);
-
-	            printf("**client_buff=%s ****\r\n",client_list[i].client_buff);
-
-				client_list[i].client_buff_len=Recvsize_2;
-
-	            parse_json_client(client_list[i].client_buff,client_list[i].client_buff_len,client_list[i].client_socket);
-	          }
-
-	          else
-	          {
-	        	  printf("receive client data error\n");
-	        	  //goto ERR;
-
-	          }
-
-
-	        }
-	        else
-	        {
-
-	            printf("**** client socket no receive data !!!!\r\n");
-	            //goto ERR;
-	        }
-
-	     }
-	  }
-		//break;
-	 }
-	 return NULL;
-
-}
-#endif
 void sig_process(int signo)
 {
 	int i;
-	for(i=0;i<MAX_CLIENT_NUM;i++)  //resolve scanfd and maxfd
+	for (i = 0; i < MAX_CLIENT_NUM; i++) //resolve scanfd and maxfd
 	{
-		if(connect_host[i]!=-1)
+		if (connect_host[i] != -1)
 		{
 			close(connect_host[i]);
 		}
@@ -1040,61 +1046,167 @@ void sig_pipe(int signo)
 {
 	_exit(0);
 }
-//发送给所有在线客户端   //add yanly141230
+//发送给所有在线客户端   //add yanly150616
 void send_msg_to_all_client(char *text, int text_size)
 {
 	int i;
-	for(i=0; i<MAX_CLIENT_NUM; i++)
+	int buf_len, sendlen;
+	char buf[65535]={0};
+	for (i = 0; i < MAX_CLIENT_NUM; i++)
 	{
-		if(client_num<0)
+		if (client_num < 0)
 		{
-			printf("send msg to all client error: no client is connected!\n");
+			GDGL_DEBUG("send msg to all client error: no client is connected!\n");
 			break;
 		}
-		if(connect_host[i] != -1)
+		if (connect_host[i] != -1)
 		{
-			if(send(connect_host[i], text, text_size, 0)<=0)
+			printf("fd[%d]\n",connect_host[i]);
+			if(islocalip_flag[i] ==1) {
+				printf("send client msg to channel\n");
+				printf("send[%d][%s]\n",text_size, text);
+				sendlen = send(connect_host[i], text, text_size, 0);
+			}
+			else {
+				buf_len = snprintf(buf, sizeof(buf)+1, "#%d#data%s", text_size, text);
+				printf("send[%d][%s]\n",buf_len, buf);
+				sendlen = send(connect_host[i], buf, buf_len, 0);
+			}
+			printf("real send all client size[%d]\n",sendlen);
+			if (sendlen <= 0)
 			{
-//				connect_host[i] =-1;
-//				client_num--;
-//				close(connect_host[i]);
+				GDGL_DEBUG("sock%d send error ,may be disconneted\n", connect_host[i]);
 				close_client(i);
 			}
-			//printf("send msg to all client,this is socket%d>>",connect_host[i]);
 		}
 	}
-	printf("send msg to all client\n");
 }
+//发送给所有在线客户端   //add yanly141230
+//void send_msg_to_all_client(char *text, int text_size)
+//{
+//	int i;
+//	int buf_len, sendlen;
+//	char buf[65535]={0};
+//	buf_len = snprintf(buf, sizeof(buf)+1, "#%d#data%s", text_size, text);
+//	GDGL_DEBUG("send all client[%d][%s]\n",buf_len, buf);
+//	for (i = 0; i < MAX_CLIENT_NUM; i++)
+//	{
+//		if (client_num < 0)
+//		{
+//			GDGL_DEBUG("send msg to all client error: no client is connected!\n");
+//			break;
+//		}
+//		if (connect_host[i] != -1)
+//		{
+////			sendlen = send(connect_host[i], text, text_size, 0);
+//			sendlen = send(connect_host[i], buf, buf_len, 0);
+//			GDGL_DEBUG("real send all client size[%d]\n",sendlen);
+//			if (sendlen <= 0)
+//			{
+//				//				connect_host[i] =-1;
+//				//				client_num--;
+//				//				close(connect_host[i]);
+//				close_client(i);
+//			}
+//			//printf("send msg to all client,this is socket%d>>",connect_host[i]);
+//		}
+//	}
+////	GDGL_DEBUG("send msg to all client\n");
+//}
 //发送给one客户端
 void send_msg_to_client(char *text, int text_size, int fd)
 {
 	int i;
-	if(send(fd,text,text_size,0)<=0)
+	int buf_len, sendlen;
+	char buf[65535]={0};
+	int socket_num =-1;
+	for (i = 0; i < MAX_CLIENT_NUM; i++)
 	{
-		//send error handle
-		for(i=0;i<MAX_CLIENT_NUM;i++)
+		if (connect_host[i] == fd)
 		{
-			if(connect_host[i] == fd)
-			{
-//				connect_host[i] = -1;
-//				client_num --;
-				close_client(i);
-				break;
-			}
+			socket_num = i;
+			printf("socket_num=%d\n",socket_num);
+			break;
 		}
-		//close(fd);
-		printf("sock%d send error ,may be disconneted\n",fd);
+	}
+//	//获取ip地址
+//	struct sockaddr_in peerAddr;
+//	int peerLen;
+//	char ipAddr[INET_ADDRSTRLEN];//保存点分十进制的地址
+//	getpeername(fd, (struct sockaddr *)&peerAddr, &peerLen);
+//	if( memcmp(inet_ntop(AF_INET, &peerAddr.sin_addr, ipAddr, sizeof(ipAddr)), "127.0.0.1", 9) ==0 ) {
+	if(socket_num >=0)
+	{
+		if(islocalip_flag[socket_num] ==1) {
+			printf("send client msg to channel\n");
+			printf("send[%d][%s]\n",text_size, text);
+			sendlen = send(fd, text, text_size, 0);
+		}
+		else {
+			buf_len = snprintf(buf, sizeof(buf)+1, "#%d#data%s", text_size, text);
+			printf("send[%d][%s]\n",buf_len, buf);
+			sendlen = send(fd, buf, buf_len, 0);
+		}
+		printf("real sendsize[%d]\n",sendlen);
+		if (sendlen <= 0)
+		{
+//			if (connect_host[socket_num] == fd)
+//			{
+				close_client(socket_num);
+//			}
+			GDGL_DEBUG("sock%d send error ,may be disconneted\n", fd);
+		}
+	}
+	else
+	{
+		printf("not find socket num\n");
+		exit(1);
 	}
 }
 //发送给server
-void send_msg_to_server(char *text, int text_size, int fd)
+ssize_t						/* Write "n" bytes to a descriptor. */
+writen(int fd, const void *vptr, size_t n)
 {
-	if(send(fd,text,text_size,0)<=0)
+	size_t		nleft, nwritten;
+	const char	*ptr;
+
+	ptr = vptr;	/* can't do pointer arithmetic on void* */
+	nleft = n;
+	while (nleft > 0) {
+		if ( (nwritten = write(fd, ptr, nleft)) <= 0)
+			return(nwritten);		/* error */
+
+		nleft -= nwritten;
+		ptr   += nwritten;
+	}
+	return(n);
+}
+
+#if 1
+int send_msg_to_server(char *text, int text_size, int fd)
+{
+	if ( writen(fd, text, text_size) != text_size ) {
+		GDGL_DEBUG("server sock%d send error ,may be disconneted\n", fd);
+		close(fd);
+		return -1;
+	}
+	return 0;
+}
+#else
+int send_msg_to_server(char *text, int text_size, int fd)
+{
+	if (send(fd, text, text_size, 0) <= 0)
 	{
 		close(fd);
-		printf("server sock%d send error ,may be disconneted\n",fd);
+#ifdef PUSH_TO_SERVER_NEW_LOGIC
+		clientfd_local_2_cloudproxy = -1;
+#endif
+		printf("server sock%d send error ,may be disconneted\n", fd);
+		return -1;
 	}
+	return 0;
 }
+#endif
 /*
  * 网关连接到服务器后，发送安防表配置信息给服务器
  * */
@@ -1102,56 +1214,63 @@ void send_all_security_config_to_server(int fd)
 {
 	char **q_data;
 	char **ieee;
-	int ieee_row,ieee_col;
-	int q_row,q_col;int i,j;
-	int index_ieee,index_q;
-	char *sql_req_config = "select ieee,nwkaddr,type,subtype,num,info,operator from stable where nwkaddr not null";
-	char *sql_req_ieee = "SELECT  DISTINCT ieee,nwkaddr FROM stable where nwkaddr not null";
+	int ieee_row, ieee_col;
+	int q_row, q_col;
+	int i, j;
+	int index_ieee, index_q;
+	char
+			*sql_req_config =
+					"select ieee,nwkaddr,type,subtype,num,info,operator from stable where nwkaddr not null";
+	char *sql_req_ieee =
+			"SELECT  DISTINCT ieee,nwkaddr FROM stable where nwkaddr not null";
 
 	cJSON *sroot;
 	cJSON *NodeList_array, *NodeList_item;
 	cJSON *SubNodeItem, *SubNodeArray;
-    int opt ;
-    char *out=NULL;
-    printf("when connect server, send all security config to server\n");
-//query database:
-    q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
-    if(q_data ==NULL)
-    {
-    	printf("query db error\n");
-    	sqlite_free_query_result(q_data);
-    	return;
-    }
-    ieee = sqlite_query_msg(&ieee_row, &ieee_col,sql_req_ieee);
-    if(ieee == NULL)
-    {
-    	printf("query db error\n");
-    	sqlite_free_query_result(ieee);
-    	return;
-    }
-    opt = sqlite_query_global_operator();
-    if(opt ==-1)
-    {
-    	printf("query db error\n");
-    	return;
-    }
-//organize json package
-    sroot = cJSON_CreateObject();
+//	int opt ;
+	char *out = NULL;
+	GDGL_DEBUG("send all security config to server\n");
+	//query database:
+	q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
+	if (q_data == NULL)
+	{
+//		printf("query db error\n");
+		sqlite_free_query_result(q_data);
+		return;
+	}
+	ieee = sqlite_query_msg(&ieee_row, &ieee_col, sql_req_ieee);
+	if (ieee == NULL)
+	{
+//		printf("query db error\n");
+		sqlite_free_query_result(ieee);
+		return;
+	}
+	//    opt = sqlite_query_global_operator();  //delete query global operator by yan150511
+	//    if(opt ==-1)
+	//    {
+	//    	printf("query db error\n");
+	//    	return;
+	//    }
+	//organize json package
+	sroot = cJSON_CreateObject();
 	cJSON_AddNumberToObject(sroot, "MsgType", SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG);
 	cJSON_AddNumberToObject(sroot, "Sn", 10);
-	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt);
-	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item =cJSON_CreateArray());
-	for(i=0;i<ieee_row;i++)
+	//	cJSON_AddNumberToObject(sroot, "GlobalOpt", opt); //delete query global operator by yan150511
+	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item
+			= cJSON_CreateArray());
+	for (i = 0; i < ieee_row; i++)
 	{
-		index_ieee = i*ieee_col+ieee_col;//ieee data的每行头
-		cJSON_AddItemToArray(NodeList_item, NodeList_array=cJSON_CreateObject());
+		index_ieee = i * ieee_col + ieee_col;//ieee data的每行头
+		cJSON_AddItemToArray(NodeList_item, NodeList_array
+				= cJSON_CreateObject());
 		cJSON_AddStringToObject(NodeList_array, "SecurityNodeID", ieee[index_ieee]);
 		cJSON_AddStringToObject(NodeList_array, "Nwkaddr", ieee[index_ieee+1]);
-		cJSON_AddItemToObject(NodeList_array, "SubNode", SubNodeItem =cJSON_CreateArray());
-		for(j=0;j<q_row;j++)
+		cJSON_AddItemToObject(NodeList_array, "SubNode", SubNodeItem
+				= cJSON_CreateArray());
+		for (j = 0; j < q_row; j++)
 		{
-			index_q = j*q_col + q_col;//data的每行头
-			if(strcmp(q_data[index_q], ieee[index_ieee])==0)
+			index_q = j * q_col + q_col;//data的每行头
+			if (strcmp(q_data[index_q], ieee[index_ieee]) == 0)
 			{
 				cJSON_AddItemToArray(SubNodeItem, SubNodeArray=cJSON_CreateObject());
 				cJSON_AddNumberToObject(SubNodeArray, "Type", atoi(q_data[index_q+2]));
@@ -1159,19 +1278,98 @@ void send_all_security_config_to_server(int fd)
 				cJSON_AddNumberToObject(SubNodeArray, "Num", atoi(q_data[index_q+4]));
 				cJSON_AddStringToObject(SubNodeArray, "Info", q_data[index_q+5]);
 				cJSON_AddNumberToObject(SubNodeArray, "OperatorType", atoi(q_data[index_q+6]));
+			} else
+			{
 			}
-			else
-			{}
 		}
 	}
 	out = cJSON_PrintUnformatted(sroot);
 	printf("size:%d\n", strlen(out));
 	send_msg_to_server(out, strlen(out), fd);
-//	json_msgsnd(MsgserverTxId, SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG, out, strlen(out));
-//free:
+	//	json_msgsnd(MsgserverTxId, SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG, out, strlen(out));
+	//free:
 	cJSON_Delete(sroot);
 	free(out);
 	sqlite_free_query_result(q_data);
 	sqlite_free_query_result(ieee);
 	return;
 }
+
+void send_all_energy_config_to_server(int fd)
+{
+	char **q_data;
+	char **ieee;
+	int ieee_row, ieee_col;
+	int q_row, q_col;
+	int i, j;
+	int index_ieee, index_q;
+	char
+			*sql_req_config =
+					"select ieee,nwkaddr,TermCode,Termtype,TermInfo,TermPeriod from etable where nwkaddr not null";
+	char *sql_req_ieee =
+			"SELECT  DISTINCT ieee,nwkaddr FROM etable where nwkaddr not null";
+
+	cJSON *sroot;
+	cJSON *NodeList_array, *NodeList_item;
+	cJSON *SubNodeItem, *SubNodeArray;
+	char *out = NULL;
+	GDGL_DEBUG("send all energy config to server\n");
+	//query database:
+	q_data = sqlite_query_msg(&q_row, &q_col, sql_req_config);
+	if (q_data == NULL)
+	{
+//		printf("query db error\n");
+		sqlite_free_query_result(q_data);
+		return;
+	}
+	ieee = sqlite_query_msg(&ieee_row, &ieee_col, sql_req_ieee);
+	if (ieee == NULL)
+	{
+//		printf("query db error\n");
+		sqlite_free_query_result(ieee);
+		return;
+	}
+	//organize json package
+	sroot = cJSON_CreateObject();
+//	cJSON_AddNumberToObject(sroot, "MsgType", SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG);
+	cJSON_AddNumberToObject(sroot, "MsgType", SERVER_UPLOAD_ALL_ENERGY_CONFIG_MSG); //modify by yanly150513
+	cJSON_AddNumberToObject(sroot, "Sn", 10);
+	cJSON_AddItemToObject(sroot, "NodeList", NodeList_item
+			= cJSON_CreateArray());
+	for (i = 0; i < ieee_row; i++)
+	{
+		index_ieee = i * ieee_col + ieee_col;//ieee data的每行头
+		cJSON_AddItemToArray(NodeList_item, NodeList_array
+				= cJSON_CreateObject());
+		cJSON_AddStringToObject(NodeList_array, "IEEE", ieee[index_ieee]);
+		cJSON_AddStringToObject(NodeList_array, "Nwkaddr", ieee[index_ieee+1]);
+		cJSON_AddItemToObject(NodeList_array, "TermList", SubNodeItem
+				= cJSON_CreateArray());
+		for (j = 0; j < q_row; j++)
+		{
+			index_q = j * q_col + q_col;//data的每行头
+			if (strcmp(q_data[index_q], ieee[index_ieee]) == 0)
+			{
+				cJSON_AddItemToArray(SubNodeItem, SubNodeArray
+						= cJSON_CreateObject());
+				cJSON_AddStringToObject(SubNodeArray, "TermCode", q_data[index_q+2]);
+				cJSON_AddNumberToObject(SubNodeArray, "TermType", atoi(q_data[index_q+3]));
+				cJSON_AddStringToObject(SubNodeArray, "TermInfo", q_data[index_q+4]);
+				cJSON_AddNumberToObject(SubNodeArray, "TermPeriod", atoi(q_data[index_q+5]));
+			} else
+			{
+			}
+		}
+	}
+	out = cJSON_PrintUnformatted(sroot);
+	printf("size:%d\n", strlen(out));
+	send_msg_to_server(out, strlen(out), fd);
+	//	json_msgsnd(MsgserverTxId, SERVER_UPLOAD_ALL_SECURITY_CONFIG_MSG, out, strlen(out));
+	//free:
+	cJSON_Delete(sroot);
+	free(out);
+	sqlite_free_query_result(q_data);
+	sqlite_free_query_result(ieee);
+	return;
+}
+
